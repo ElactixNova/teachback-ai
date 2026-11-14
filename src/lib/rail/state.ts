@@ -207,7 +207,10 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
   const board = boardNote(scheme, results);
   // Before moving on, probe the point they just explained if part of it is still missing (the active
   // point first, else any other partly explained one that has not used its two tries).
-  const partly = (r: CriterionResult) => open(r) && r.missingSteps.length > 0 && r.attempts < 2 && r.status !== "not_covered" && (r.awarded > 0 || r.status === "in_progress");
+  // "missed" counts too: a student who knows the point but forgot to say it can still earn it.
+  const partly = (r: CriterionResult) => open(r) && r.missingSteps.length > 0 && r.attempts < 2 && r.status !== "not_covered";
+  // Once every point has been touched, sweep back over the ones that still lost marks.
+  const sweep = !focus.length && !results.some((r) => r.status === "not_covered") ? results.filter(partly) : [];
   const followUp = results.find((r) => r.criterionId === active && partly(r)) ?? results.find(partly);
   const next = nextUp ? scheme.criteria.find((c) => c.id === nextUp.criterionId) : undefined;
   const nextAsk = next?.probe
@@ -222,10 +225,16 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
     `Not covered yet: ${list(pick(["not_covered"]))}.`,
     active ? `They are explaining now: ${title(active)}.` : "",
     focus.length ? `They chose to work on: ${focus.map((r) => title(r.criterionId)).join("; ")}.` : "",
-    followUp
+    sweep.length
+      ? `SWEEP: every point has been touched, but these still lost marks, and they may know it and have just forgotten to say it: ${sweep
+          .map((r) => `"${title(r.criterionId)}" (not yet said: "${r.missingSteps[0]}")`)
+          .join("; ")}. Take ONE of them per turn, in this order: one short curious nudge towards the missing part, never stating it. Nudge each point only once: skip the ones you have already nudged since this sweep began, and when none are left suggest they say they are finished so you can open their report.`
+      : followUp
       ? `FIRST, before moving on, follow up on "${title(followUp.criterionId)}": they have not yet made this point: "${followUp.missingSteps[0]}". Ask ONE short curious question that leads them towards it, and nothing else this turn. Never state it. If they cannot, move on.`
       : "",
-    nextUp
+    sweep.length
+      ? ""
+      : nextUp
       ? `${followUp ? "Only in a LATER turn, once that follow-up is answered or given up" : "If they pause"}, move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
       : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
     "Start your reply by reacting in a few words to what they just said.",
