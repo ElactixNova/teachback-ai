@@ -33,6 +33,8 @@ export function ZoomableImage({ src, alt, className = "" }: Props) {
     if (!open && d.open) d.close();
   }, [open]);
 
+  const isData = src.startsWith("data:");
+
   async function download() {
     setBusy(true);
     try {
@@ -45,9 +47,22 @@ export function ZoomableImage({ src, alt, className = "" }: Props) {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
-      window.open(src, "_blank", "noopener,noreferrer");
+      // Last resort for remote images (data: URIs cannot be opened in a tab, see openInTab).
+      if (!isData) window.open(src, "_blank", "noopener,noreferrer");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Chrome blocks top-level navigation to data: URIs, so inline SVGs open through a blob URL instead.
+  async function openInTab() {
+    try {
+      const blob = await (await fetch(src)).blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      /* nothing sensible to fall back to */
     }
   }
 
@@ -75,9 +90,15 @@ export function ZoomableImage({ src, alt, className = "" }: Props) {
               <button type="button" onClick={download} disabled={busy} className={btn}>
                 <Download className="h-4 w-4" /> {busy ? "Saving…" : "Download"}
               </button>
-              <a href={src} target="_blank" rel="noopener noreferrer" className={btn}>
-                <ExternalLink className="h-4 w-4" /> Open in new tab
-              </a>
+              {isData ? (
+                <button type="button" onClick={() => void openInTab()} className={btn}>
+                  <ExternalLink className="h-4 w-4" /> Open in new tab
+                </button>
+              ) : (
+                <a href={src} target="_blank" rel="noopener noreferrer" className={btn}>
+                  <ExternalLink className="h-4 w-4" /> Open in new tab
+                </a>
+              )}
               <button type="button" onClick={() => setOpen(false)} className={btn} aria-label="Close">
                 <X className="h-4 w-4" /> Close
               </button>

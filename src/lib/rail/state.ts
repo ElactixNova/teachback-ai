@@ -181,7 +181,7 @@ const MAX_BOARD_CHARS = 600;
  * What the examiner saw on the whiteboard, so the avatar knows what is already drawn or written.
  * Empty string when the board has been empty. Truncated: it goes into the avatar's context.
  */
-function boardNote(scheme: MarkScheme, results: CriterionResult[]): string {
+export function boardNote(scheme: MarkScheme, results: CriterionResult[]): string {
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   const seen = results
     .filter((r) => r.boardObservation?.trim())
@@ -219,6 +219,22 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
     .join(" ");
 }
 
+const words = (s: string) => new Set(s.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+
+/**
+ * True when the board observation appeared for the first time or changed substantially. The examiner
+ * rewords the same drawing on nearly every live tick, so a plain "!==" would fire a note each time and
+ * make the avatar chatty; get_rail_status always carries the latest observation anyway.
+ */
+function boardMoved(prev: string | undefined, next: string | undefined): boolean {
+  if (!next?.trim()) return false;
+  if (!prev?.trim()) return true;
+  const a = words(prev);
+  const b = words(next);
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared / Math.max(a.size, b.size, 1) < 0.5;
+}
+
 /**
  * A private context note for the avatar (Anam addContext) when the rail changed in a way that should
  * steer it: a criterion got full marks or was parked. Null when nothing worth saying changed.
@@ -228,7 +244,7 @@ export function railChangeNote(scheme: MarkScheme, before: CriterionResult[], af
   const was = (id: string) => before.find((r) => r.criterionId === id)?.status;
   const nowFull = after.filter((r) => r.status === "full" && was(r.criterionId) !== "full").map((r) => title(r.criterionId));
   const nowParked = after.filter((r) => r.status === "parked" && was(r.criterionId) !== "parked").map((r) => title(r.criterionId));
-  const boardChanged = after.some((r) => r.boardObservation?.trim() && r.boardObservation !== before.find((b) => b.criterionId === r.criterionId)?.boardObservation);
+  const boardChanged = after.some((r) => boardMoved(before.find((b) => b.criterionId === r.criterionId)?.boardObservation, r.boardObservation));
   if (!nowFull.length && !nowParked.length && !boardChanged) return null;
   return [
     "[RAIL UPDATE, private, do not read out]",

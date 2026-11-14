@@ -152,3 +152,11 @@ test("the avatar is told what is on the board, so it never asks to repeat it", (
   assert.match(railStatusText(scheme, after), /On their whiteboard/);
   assert.doesNotMatch(railStatusText(scheme, before), /whiteboard/);
 });
+
+test("board note: first sighting fires, rewording the same drawing does not, a new drawing does", () => {
+  const withBoard = (text) => [{ ...r("c1", "partial", 1), boardObservation: text }, r("c2", "not_covered", 0)];
+  const none = [r("c1", "partial", 1), r("c2", "not_covered", 0)];
+  assert.ok(railChangeNote(scheme, none, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced.")));
+  assert.equal(railChangeNote(scheme, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced."), withBoard("The board shows CO2 + H2O -> C6H12O6 + O2 which is not balanced.")), null);
+  assert.ok(railChangeNote(scheme, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced."), withBoard("A leaf diagram with arrows showing sunlight and chloroplasts.")));
+});
