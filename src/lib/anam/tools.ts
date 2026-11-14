@@ -76,12 +76,12 @@ export const CLIENT_TOOLS: AnamClientToolDefinition[] = [
 
 // ---- Mark Scheme Rail (T11) -------------------------------------------------------------------
 
-const railTool = (name: ToolName, description: string, properties: AnamClientToolDefinition["parameters"]["properties"] = {}, required?: string[], timeout = 10): AnamClientToolDefinition => ({
+const railTool = (name: ToolName, description: string, properties: AnamClientToolDefinition["parameters"]["properties"] = {}, required?: string[], timeout = 10, awaitResult = true): AnamClientToolDefinition => ({
   type: "client",
   name,
   description,
   parameters: { type: "object", properties, ...(required ? { required } : {}) },
-  awaitResult: true,
+  awaitResult,
   toolTimeoutSeconds: timeout,
 });
 
@@ -120,13 +120,15 @@ export const RAIL_TOOLS: AnamClientToolDefinition[] = [
   ),
   railTool(
     TOOL.writeOnBoard,
-    "Write your question on the student's whiteboard so they do not have to copy it down. Use it when your question contains an equation, a formula, numbers or a long expression. Write only the question, never an answer or a hint. Returns where on the board it was written, or that it is queued.",
+"Write your question on the student's whiteboard by hand, so they can read it while you say it. Use it when your question contains an equation, a formula, numbers or a long expression. Call it first, then say the question: the pen writes as you speak. Write only the question, never an answer or a hint.",
     {
-      content: { type: "string", description: "What to write, at most 200 characters. LaTeX when kind is math (for example x^2 + 5x + 6 = 0); plain words when kind is text." },
+      content: { type: "string", description: "The question as it should read on the board, at most 200 characters, for example: Solve x^2 + 5x + 6 = 0. Plain words for the words, LaTeX for the maths (x^2, \\frac{1}{x}, \\sqrt{x})." },
       kind: { type: "string", description: 'Either "math" or "text".' },
       label: { type: "string", description: "Optional short label, for example Question 1." },
     },
     ["content", "kind"],
     5,
+    // Fire and forget: Sam must start speaking at once so the writing keeps pace with its voice.
+    false,
   ),
 ];

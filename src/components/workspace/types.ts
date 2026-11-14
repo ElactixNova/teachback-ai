@@ -72,6 +72,8 @@ export interface WorkspaceActions {
   generateVisualExplainer: (criterionId?: string) => Promise<VisualExplainer | null>;
   /** Sam writes its question on the whiteboard as a card in free space; says whether it was written or queued. */
   writeOnBoard: (note: NoteInput) => NoteOutcome;
+  /** Sam's speech as it streams (characters just spoken, turn ended): the pen writing a question follows it. */
+  speechProgress: (chars: number, done: boolean) => void;
 }
 
 /** A live avatar session returned by AvatarBridge.connect. */

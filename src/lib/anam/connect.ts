@@ -25,12 +25,15 @@ const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
  * Turn streamed message chunks into whole transcript lines, and surface cues as they arrive.
  * `typed` holds lines sent with sendText: the workspace already shows them, so their echo is skipped.
  */
-function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>) {
+function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>, onPersonaSpeech?: (chars: number, done: boolean) => void) {
   const buffers = new Map<string, { speaker: Speaker; text: string }>();
   return (e: MessageStreamEvent) => {
     const speaker: Speaker = String(e.role) === "user" ? "student" : "avatar";
     const cue = toUiCue(e.cueTag);
     if (cue) handlers.onCue(cue);
+
+    // Sam's words as they stream: the pen writing a question on the board keeps pace with them.
+    if (speaker === "avatar") onPersonaSpeech?.((e.content ?? "").length, !!(e.endOfSpeech || e.interrupted));
 
     const buf = buffers.get(e.id) ?? { speaker, text: "" };
     buf.text += e.content ?? "";
@@ -57,6 +60,8 @@ export async function connectAnam(opts: {
   videoElementId: string;
   handlers: AvatarHandlers;
   context: PersonaContext;
+  /** Called for every streamed chunk of Sam's speech: its length, and whether Sam's turn ended or was interrupted. */
+  onPersonaSpeech?: (chars: number, done: boolean) => void;
   /** Register client tool handlers; return a cleanup. Called before streaming starts. */
   registerTools: (client: AnamClient) => () => void;
 }): Promise<AnamSession> {
@@ -89,7 +94,7 @@ export async function connectAnam(opts: {
     client = c;
 
     // Register listeners and tool handlers before streaming so nothing is missed.
-    c.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, createTranscriptCollector(handlers, typed));
+    c.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, createTranscriptCollector(handlers, typed, opts.onPersonaSpeech));
     c.addListener(AnamEvent.DIRECTOR_NOTE_CUE_APPLIED, (ev) => {
       const cue = toUiCue(ev.cueTag);
       if (cue) handlers.onCue(cue);

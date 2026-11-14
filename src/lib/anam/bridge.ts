@@ -167,6 +167,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
           notesExcerpt: ctx.notesExcerpt,
           criteria: markScheme?.criteria.map((c) => ({ id: c.id, title: c.title, probe: c.probe, ask: c.ask })),
         },
+        onPersonaSpeech: (chars, done) => actions.speechProgress(chars, done),
         registerTools: (c) => {
           const unregister = registerTools(c, actions);
           return () => {
