@@ -58,7 +58,27 @@ function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>)
   };
 }
 
+/** A check that finished this recently is reused instead of re-running the analysis. */
+const RECENT_CHECK_MS = 20_000;
+
 function registerTools(client: AnamClient, actions: WorkspaceActions) {
+  // The LLM sometimes calls the check twice in a row ("I'm finished" ... "check my explanation").
+  // Share one in-flight check and reuse a fresh result, so we never pay for two analyses + visuals.
+  let inflight: Promise<GapReport | null> | null = null;
+  let lastCheckAt = 0;
+  const check = (): Promise<GapReport | null> => {
+    const fresh = actions.getReport();
+    if (fresh && Date.now() - lastCheckAt < RECENT_CHECK_MS) {
+      actions.openGapReport();
+      return Promise.resolve(fresh);
+    }
+    inflight ??= actions.checkExplanation().finally(() => {
+      lastCheckAt = Date.now();
+      inflight = null;
+    });
+    return inflight;
+  };
+
   const unregister = [
     client.registerToolCallHandler(TOOL.captureWhiteboard, {
       onStart: async () => {
@@ -74,7 +94,7 @@ function registerTools(client: AnamClient, actions: WorkspaceActions) {
           actions.openGapReport();
           return summariseReport(last);
         }
-        const report = await actions.checkExplanation();
+        const report = await check();
         if (!report) return "The check could not run: the student has not explained anything yet, or the check failed. Ask them to explain a bit more first.";
         return summariseReport(report);
       },
@@ -84,7 +104,7 @@ function registerTools(client: AnamClient, actions: WorkspaceActions) {
         let r = actions.getReport();
         if (!r) {
           // No report yet: run the check; the workspace then starts the visual for the top gap itself.
-          r = await actions.checkExplanation();
+          r = await check();
           if (!r) return "The check could not run: the student has not explained anything yet. Ask them to explain a bit first.";
           if (r.gaps.length === 0) return `${summariseReport(r)} There are no gaps, so no visual is needed.`;
           return `${summariseReport(r)} A visual for the most important gap is being generated and will appear in the report in a few seconds.`;
