@@ -18,27 +18,32 @@ export interface NoteInput {
 }
 
 /** What happened to a note, so the avatar can react naturally. */
-export type NoteOutcome = { status: "written"; where: string } | { status: "queued" } | { status: "hidden" };
+export type NoteOutcome =
+  | { status: "written"; where: string }
+  /** The same question is already on the board; the board now shows it. */
+  | { status: "already"; where: string }
+  | { status: "queued" }
+  | { status: "hidden" }
+  | { status: "refused"; reason: NoteRefusal };
 
 /** Clear space kept around every stroke and every other note, in screen px. */
 export const NOTE_MARGIN = 24;
 export const MAX_NOTE_CHARS = 200;
-export const MIN_NOTE_GAP_MS = 8000;
-export const MAX_NOTES_PER_SESSION = 6;
+/** A safety limit only: a session never needs this many questions. */
+export const MAX_NOTES_PER_SESSION = 30;
 
 // ---- what may be written -----------------------------------------------------------------------
 
-export type NoteRefusal = "empty" | "too_long" | "unsafe" | "duplicate" | "too_soon" | "limit";
+export type NoteRefusal = "empty" | "too_long" | "unsafe" | "limit";
 
 // LaTeX commands that load, define or link things: never needed for a question.
 const UNSAFE = /\\(href|url|includegraphics|input|include|def|newcommand|renewcommand|catcode|write|html[a-z]*)\b/i;
 
-/** Cleans a note and applies the limits: 200 chars, one per 8 s, six per session, no repeat of the last one. */
-export function admitNote(
-  input: NoteInput,
-  written: { content: string; at: number }[],
-  now: number,
-): { ok: true; note: NoteInput } | { ok: false; reason: NoteRefusal } {
+/**
+ * Cleans a note and applies the hard limits: 200 chars, nothing unsafe, a session cap. Repeats are
+ * caught by the board (same maths already there) and pace by the caller (it queues), so neither is refused here.
+ */
+export function admitNote(input: NoteInput, writtenSoFar: number): { ok: true; note: NoteInput } | { ok: false; reason: NoteRefusal } {
   const content = input.content
     .replace(/[\u0000-\u001f\u007f<>]/g, " ")
     .replace(/\s+/g, " ")
@@ -48,10 +53,7 @@ export function admitNote(
   if (!content) return { ok: false, reason: "empty" };
   if (content.length > MAX_NOTE_CHARS) return { ok: false, reason: "too_long" };
   if (UNSAFE.test(content)) return { ok: false, reason: "unsafe" };
-  const last = written[written.length - 1];
-  if (last && last.content === content) return { ok: false, reason: "duplicate" };
-  if (written.length >= MAX_NOTES_PER_SESSION) return { ok: false, reason: "limit" };
-  if (last && now - last.at < MIN_NOTE_GAP_MS) return { ok: false, reason: "too_soon" };
+  if (writtenSoFar >= MAX_NOTES_PER_SESSION) return { ok: false, reason: "limit" };
   const label = input.label?.replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30);
   return { ok: true, note: { content, kind: input.kind === "text" ? "text" : "math", ...(label ? { label } : {}) } };
 }
@@ -127,6 +129,39 @@ export function shiftIntoView(r: Rect, viewport: Rect, margin: number): { dx: nu
     return 0;
   };
   return { dx: axis(r.x, r.w, viewport.x, viewport.w), dy: axis(r.y, r.h, viewport.y, viewport.h) };
+}
+
+/** Pan (x, y in screen px) and zoom of the board: screen = world * scale + offset. */
+export interface BoardView {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+/**
+ * The view that shows the whole of `rect` (world coordinates): the current view if it already does,
+ * otherwise the smallest pan, zooming out only when the rectangle is larger than the visible board.
+ * `screen` is the board size in px with the strips its controls cover at the top and bottom.
+ */
+export function viewToShow(rect: Rect, view: BoardView, screen: { w: number; h: number; top: number; bottom: number }, margin: number, minScale: number): BoardView {
+  const availW = Math.max(1, screen.w - 2 * margin);
+  const availH = Math.max(1, screen.h - screen.top - screen.bottom - 2 * margin);
+  const scale = Math.max(minScale, Math.min(view.scale, availW / rect.w, availH / rect.h));
+  // Zooming out keeps the centre of the visible board where it is.
+  const cx = screen.w / 2;
+  const cy = (screen.top + screen.h - screen.bottom) / 2;
+  const k = scale / view.scale;
+  let x = cx - (cx - view.x) * k;
+  let y = cy - (cy - view.y) * k;
+  const fit = (offset: number, start: number, len: number, lo: number, hi: number) => {
+    const a = start * scale + offset;
+    if (a < lo) return offset + (lo - a);
+    const b = a + len * scale;
+    return b > hi ? offset - (b - hi) : offset;
+  };
+  x = fit(x, rect.x, rect.w, margin, screen.w - margin);
+  y = fit(y, rect.y, rect.h, screen.top + margin, screen.h - screen.bottom - margin);
+  return { x, y, scale };
 }
 
 // ---- handwriting (T22) -------------------------------------------------------------------------

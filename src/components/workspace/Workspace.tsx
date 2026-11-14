@@ -12,6 +12,8 @@ import { CentrePanel } from "./CentrePanel";
 import { GapNotesPanel, gapsOf, type CheckState } from "./GapNotesPanel";
 import { MarkSchemeRail } from "./MarkSchemeRail";
 import { MAX_LEARN_IMAGES, SummaryView } from "./SummaryView";
+import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
+import { spokenToLatex } from "@/lib/math/spoken";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
 import { downloadText, formatTranscript, transcriptFileName } from "./transcriptExport";
 import { analyzeFinal, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
@@ -361,7 +363,13 @@ export function Workspace() {
 
   // Dev only: lets the headless board-notes test drive the avatar's actions without an Anam session.
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") (window as unknown as { __feynmanActions?: WorkspaceActions }).__feynmanActions = actions;
+    if (process.env.NODE_ENV === "production") return;
+    const dev = window as unknown as { __feynmanActions?: WorkspaceActions; __feynmanQuestions?: QuestionWriter };
+    dev.__feynmanActions = actions;
+    // The same writer the avatar bridge uses, so a test can play Sam's speech and the student's requests into it.
+    dev.__feynmanQuestions = createQuestionWriter((note) => actions.writeOnBoard(note), {
+      toLatex: async (spoken) => spokenToLatex(spoken) ?? (await remoteLatex(spoken).catch(() => null)),
+    });
   }, [actions]);
 
   const handlers: AvatarHandlers = useMemo(
