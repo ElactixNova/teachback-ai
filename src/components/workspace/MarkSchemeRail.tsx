@@ -6,6 +6,7 @@ import type { CriterionResult, CurriculumContext, MarkScheme } from "@/types/ses
 import { CurriculumUploader } from "./CurriculumUploader";
 import { MAX_ATTEMPTS } from "@/lib/rail/state";
 import { STATUS_LABEL, SourceChip, StatusIcon, displayStatus } from "./status";
+import { AskChip } from "./callouts";
 import type { Async } from "./types";
 
 interface Props {
@@ -140,9 +141,12 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
                         <span className="mr-1 text-faint">{i + 1}.</span>
                         {c.title}
                       </p>
-                      <p className={`text-xs ${s === "missed" ? "font-semibold text-missed" : s === "in_progress" ? "font-semibold text-accent" : "text-muted"}`}>
-                        {sub}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className={`text-xs ${s === "missed" ? "font-semibold text-missed" : s === "in_progress" ? "font-semibold text-accent" : "text-muted"}`}>
+                          {sub}
+                        </p>
+                        {s !== "full" && s !== "parked" && <AskChip ask={c.ask} />}
+                      </div>
                     </div>
                     <span className="shrink-0 text-sm font-semibold tabular-nums">
                       {r?.awarded ?? 0}
