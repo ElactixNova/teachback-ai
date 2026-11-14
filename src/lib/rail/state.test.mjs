@@ -187,3 +187,17 @@ test("an unfinished board tells the avatar to give time, and a flip fires a note
   assert.ok(railChangeNote(scheme, mk(true), mk(false)), "unfinished -> finished is worth a note");
   assert.equal(railChangeNote(scheme, mk(true), mk(true)), null);
 });
+
+test("sweep: once every point is touched, missed and partly explained points each get one nudge", () => {
+  const touched = mergeLive(scheme, initialRail(scheme), [
+    { ...r("c1", "partial", 1, "it uses water", "00:05"), missingSteps: ["CO2", "glucose"] },
+    { ...r("c2", "missed", 0, "in the roots", "00:20"), missingSteps: ["leaves", "chloroplasts"] },
+  ]).results;
+  const text = railStatusText(scheme, touched);
+  assert.match(text, /SWEEP: .*"Inputs and outputs" \(not yet said: "CO2"\); "Where it happens" \(not yet said: "leaves"\).*only once/);
+  assert.doesNotMatch(text, /FIRST, before moving on|Everything has been addressed/);
+  // A point still not covered comes first: no sweep yet.
+  assert.doesNotMatch(railStatusText(scheme, mergeLive(scheme, initialRail(scheme), [r("c1", "partial", 1, "it uses water", "00:05")]).results), /SWEEP/);
+  // Parked points are never swept.
+  assert.doesNotMatch(railStatusText(scheme, parkResult(parkResult(touched, "c1"), "c2")), /SWEEP/);
+});

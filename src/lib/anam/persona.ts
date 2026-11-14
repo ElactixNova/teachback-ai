@@ -30,7 +30,7 @@ export interface AnamPersonaConfig {
   maxSessionLengthSeconds: number;
   initialMessage: string;
   directorNotes: { presetStyle: "warm"; expressivity: number };
-  voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: number; silenceBeforeSessionEndSeconds: number };
+  voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: number; silenceBeforeSessionEndSeconds: number; endOfSpeechSensitivity: number };
   tools: AnamClientToolDefinition[];
 }
 
@@ -80,7 +80,9 @@ export function buildRailSystemPrompt(ctx: PersonaContext): string {
     "[FOLLOW UP] Before you move on to a new point, call " + TOOL.getRailStatus + " (say nothing about it) and read the result: if the point they just explained is only partly covered, ask ONE short curious follow-up aimed at the first thing still missing (the private rail notes tell you what), without saying the answer, for example \"And where does the oxygen end up?\". If they still cannot, move on.",
     PERSISTENCE +
       ` After the second try on a point that still does not make sense, call ${TOOL.parkCriterion} with that point, say warmly that you will park it for the report, and move on.`,
-    "[BOARD] The student often writes or draws while they think. Never interrupt while they are writing or drawing: if they say they are writing, drawing, working it out or give you a moment, say nothing until they speak again. Do not fill silences, and wait a few seconds after they stop talking before you reply. Whatever is on the board counts as part of their answer: private rail notes tell you what is written or drawn there, so never ask them to say aloud something that is already on the board; at most, ask what a specific part means to them.",
+    "[PATIENCE] Students think in pauses, and a teacher who is interrupted loses their thread. If their last sentence sounds unfinished (it trails off, or ends on a word like and, so, because or um), they are still thinking: reply with only a short encouragement such as \"mm-hm, take your time\" and no question. Do not fill silences. Never interrupt while they are writing or drawing: if they say they are writing, drawing, working it out or ask for a moment, or a private note starting \"[BOARD\" says they are writing, say nothing until they speak again. When a \"[BOARD\" note says they stopped writing: if the board notes call the board UNFINISHED or they seem midway, keep waiting; otherwise ask once, in a few words, whether they are finished with that or still working. Ask that only once for each thing they write: if you have already asked it since they last spoke, stay quiet.",
+    "[BOARD] Whatever is on the board counts as part of their answer: private rail notes tell you what is written or drawn there, so never ask them to say aloud something that is already on the board; at most, ask what a specific part means to them.",
+    "[SWEEP] Some students know a point but forget to say it. When a rail note starts a SWEEP, go back over the listed points one per turn with a single gentle nudge each (for example: \"earlier you mentioned the leaves, was there anything inside them that matters?\"). One nudge per point, never a second, and never the answer; if they do not add to it, accept that and go to the next one.",
     `[RAIL] You may receive private notes starting with "[RAIL UPDATE". They come from the examiner: follow them, never read them out, and never ask again about points they call fully explained or parked. Call ${TOOL.getRailStatus} when they pause and you are unsure what to ask next, or when they ask what is left.`,
     EXPRESSION,
     `[TOOLS] Call ${TOOL.openGapReport} when they say they are finished, ask how they did, or ask you to check them; the screen then switches to their results. Then tell them their mark and the one point to work on, in your own words, in two sentences at most. Call ${TOOL.captureWhiteboard} when they mention the board. Call ${TOOL.generateVisualExplainer} when they ask for a picture or diagram. Say a few words like "let me look" before a tool runs.`,
@@ -108,7 +110,9 @@ export function buildPersonaConfig(ctx: PersonaContext = {}): AnamPersonaConfig 
     // https://anam.ai/docs/personas/session/voice-detection.md. By default Anam makes the persona prompt a
     // user who is quiet for 15 s and ends the session after 60 s of silence; a student writing on the
     // board is quiet for longer than both. 0 = never prompt; 300 = five quiet minutes before the session ends.
-    voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: 0, silenceBeforeSessionEndSeconds: 300 },
+    // endOfSpeechSensitivity: "how eager the persona is to start speaking" (0-1, default 0.5). Lower, so Sam
+    // waits longer after the student stops before replying.
+    voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: 0, silenceBeforeSessionEndSeconds: 300, endOfSpeechSensitivity: 0.3 },
     tools: rail ? RAIL_TOOLS : CLIENT_TOOLS,
   };
 }
