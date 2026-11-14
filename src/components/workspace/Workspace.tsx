@@ -67,14 +67,17 @@ export function Workspace() {
       : [...r.gaps].sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])[0];
     if (!gap) return null;
     setDrawerOpen(true);
-    setVisuals((v) => ({ ...v, [gap.id]: { status: "loading" } }));
+    // Ignore results that arrive after a Re-check replaced this report.
+    const setForThisReport = (state: VisualState) => {
+      if (latest.current.report === r) setVisuals((v) => ({ ...v, [gap.id]: state }));
+    };
+    setForThisReport({ status: "loading" });
     try {
       const visual = await generateVisual(visualRequestFor(gap, latest.current.curriculum?.topic));
-      setVisuals((v) => ({ ...v, [gap.id]: { status: "ready", visual } }));
+      setForThisReport({ status: "ready", visual });
       return visual;
     } catch (e) {
-      const error = e instanceof Error ? e.message : "Could not generate a visual.";
-      setVisuals((v) => ({ ...v, [gap.id]: { status: "error", error } }));
+      setForThisReport({ status: "error", error: e instanceof Error ? e.message : "Could not generate a visual." });
       return null;
     }
   }, []);
@@ -138,7 +141,12 @@ export function Workspace() {
 
   const connect = useCallback(async () => {
     sessionRef.current?.disconnect();
-    sessionRef.current = await avatarBridge.connect({ videoElementId: ANAM_VIDEO_ID, actions, handlers });
+    sessionRef.current = null;
+    try {
+      sessionRef.current = await avatarBridge.connect({ videoElementId: ANAM_VIDEO_ID, actions, handlers });
+    } catch (e) {
+      handlers.onStatus("error", e instanceof Error ? e.message : "Could not connect to the avatar.");
+    }
   }, [actions, handlers]);
 
   const disconnect = useCallback(() => {

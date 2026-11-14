@@ -186,7 +186,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     const canvas = canvasRef.current;
     if (!canvas || strokes.current.length === 0) return null;
     const { w, h } = size.current;
-    const scale = Math.min(1, MAX_EXPORT_EDGE / Math.max(w, h)) * Math.min(size.current.dpr, 2);
+    // Output pixels per CSS pixel: use the screen's density (max 2x), but never exceed MAX_EXPORT_EDGE.
+    const scale = Math.min(size.current.dpr, 2, MAX_EXPORT_EDGE / Math.max(w, h));
     const out = document.createElement("canvas");
     out.width = Math.max(1, Math.round(w * scale));
     out.height = Math.max(1, Math.round(h * scale));
