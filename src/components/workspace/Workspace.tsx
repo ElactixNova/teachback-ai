@@ -429,7 +429,7 @@ export function Workspace() {
       </header>
 
       {/* Phones: one scrolling column (mark scheme, avatar, centre). lg+: three fixed-height columns. */}
-      <main className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6 pt-5 sm:px-6 lg:grid lg:grid-cols-[minmax(250px,1fr)_minmax(0,2.2fr)_minmax(280px,1.1fr)] lg:overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6 pt-5 sm:px-6 lg:grid lg:grid-cols-[minmax(240px,0.85fr)_minmax(0,2fr)_minmax(340px,1.25fr)] lg:overflow-hidden">
         <div className="order-1 flex shrink-0 flex-col lg:order-none lg:min-h-0">
           <MarkSchemeRail
             curriculum={curriculum}

@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, CircleCheck, ImageOff, LoaderCircle, RefreshCw, Sparkles, Square, SquareCheck } from "lucide-react";
+import { ArrowLeft, Check, ImageOff, LoaderCircle, RefreshCw, Sparkles, Square, SquareCheck } from "lucide-react";
 import type { Criterion, CriterionResult, GapReport, MarkScheme } from "@/types/session";
-import { MarksPill, SourceChip, StatusIcon, WORST_FIRST, displayStatus } from "./status";
+import { MarksPill, SEVERITY, ScoreRing, SeverityTag, SourceChip, StatusIcon, WORST_FIRST, displayStatus, verdict } from "./status";
 import type { VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
 
@@ -77,7 +77,8 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
   const s = displayStatus(r);
   const missing = new Set(r.missingSteps);
   return (
-    <article className={`rounded-2xl border bg-card p-4 sm:p-5 ${primary ? "border-accent ring-1 ring-accent" : "border-line"}`}>
+    <article className={`relative overflow-hidden rounded-lg border bg-card p-4 pl-5 sm:p-5 sm:pl-6 ${primary ? "border-ink shadow-[var(--shadow-action)]" : "border-line"}`}>
+      <span className={`absolute inset-y-0 left-0 w-1 ${SEVERITY[s]?.bar ?? "bg-line"}`} aria-hidden />
       <header className="flex items-start gap-3">
         <StatusIcon status={s} className="mt-0.5" />
         <div className="min-w-0 flex-1">
@@ -85,7 +86,10 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
           <h3 className="font-semibold leading-snug">{c.title}</h3>
           {s === "parked" && <p className="text-xs font-semibold text-parked">Parked after 2 tries</p>}
         </div>
-        <MarksPill result={r} criterion={c} />
+        <div className="flex shrink-0 items-center gap-2">
+          <SeverityTag status={s} />
+          <MarksPill result={r} criterion={c} />
+        </div>
       </header>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -94,7 +98,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
             What you said{r.evidence ? ` · ${r.evidence.timestamp}` : ""}
           </p>
           {r.evidence ? (
-            <blockquote className="mt-1.5 text-sm leading-relaxed">“{r.evidence.quote}”</blockquote>
+            <blockquote className="mt-1.5 text-[15px] italic leading-6">“{r.evidence.quote}”</blockquote>
           ) : (
             <p className="mt-1.5 text-sm italic text-muted">You didn’t say anything about this.</p>
           )}
@@ -154,16 +158,14 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
   const minutesLeft = report?.studyPlan.reduce((n, s) => n + (s.done ? 0 : s.estimatedMinutes), 0) ?? 0;
 
   return (
-    <section aria-label="Gap notes" className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-card">
+    <section aria-label="Gap notes" className="sheet flex h-full min-h-0 flex-col overflow-hidden">
       <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div className="min-w-0 flex-1">
           {report ? (
             <>
-              <p className="text-lg font-semibold leading-tight tabular-nums">
-                {report.awarded} / {report.total} marks
-              </p>
-              <p className="text-xs font-semibold text-muted">
-                {gaps.length + notCovered.length === 0 ? "Nothing left to close" : `${gaps.length + notCovered.length} gaps to close`}
+              <h2 className="text-2xl font-semibold leading-tight">Knowledge Gap Report</h2>
+              <p className="text-sm text-muted">
+                <span className="tabular">{report.awarded} / {report.total} marks</span> · checked against your mark scheme
               </p>
             </>
           ) : (
@@ -189,7 +191,16 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-canvas/60 p-4 sm:p-5">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-canvas p-4 sm:p-5">
+        {report && scheme && (
+          <ScoreSummary
+            awarded={report.awarded}
+            total={report.total}
+            counts={{ missed: gaps.filter((g) => displayStatus(g.result) === "missed").length, partial: gaps.filter((g) => displayStatus(g.result) === "partial").length, parked: gaps.filter((g) => displayStatus(g.result) === "parked").length, not_covered: notCovered.length }}
+            nailed={fullMarks.map((c) => c.title)}
+          />
+        )}
+
         {checking && (
           <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-4" role="status">
             <LoaderCircle className="h-5 w-5 animate-spin text-accent" />
@@ -272,15 +283,58 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
           </article>
         )}
 
-        {report && fullMarks.length > 0 && (
-          <p className="flex items-start gap-2 px-1 text-sm text-muted">
-            <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-            <span>
-              <span className="font-semibold text-ink">Full marks:</span> {fullMarks.map((c) => c.title).join(" · ")}
-            </span>
-          </p>
-        )}
       </div>
     </section>
+  );
+}
+
+type Counts = { missed: number; partial: number; parked: number; not_covered: number };
+
+/** Report header (Figma Report / Filled): score ring + verdict, severity breakdown bar, "You nailed" chips. */
+function ScoreSummary({ awarded, total, counts, nailed }: { awarded: number; total: number; counts: Counts; nailed: string[] }) {
+  const parts = (Object.keys(counts) as (keyof Counts)[]).filter((k) => counts[k] > 0);
+  const gapCount = parts.reduce((n, k) => n + counts[k], 0);
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-5">
+        <ScoreRing awarded={awarded} total={total} />
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold">{verdict(awarded, total)}</h2>
+          <p className="mt-1 text-[15px] leading-6 text-muted">
+            {gapCount === 0 ? "Every point on the mark scheme is covered." : `${gapCount} ${gapCount === 1 ? "point" : "points"} to close. The biggest gap is first, with what you said and how to fix it.`}
+          </p>
+        </div>
+      </div>
+      {gapCount > 0 && (
+        <div>
+          <div className="flex gap-1" aria-hidden>
+            {parts.flatMap((k) => Array.from({ length: counts[k] }, (_, i) => <span key={`${k}${i}`} className={`h-1.5 flex-1 rounded-full ${SEVERITY[k]?.bar}`} />))}
+          </div>
+          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+            {parts.map((k) => (
+              <span key={k} className="inline-flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${SEVERITY[k]?.bar}`} aria-hidden />
+                {counts[k]} {SEVERITY[k]?.label.toLowerCase()}
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
+      {nailed.length > 0 && (
+        <div>
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-base font-semibold">You nailed</h3>
+            <span className="text-sm text-faint">{nailed.length}</span>
+          </div>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {nailed.map((t) => (
+              <li key={t} className="inline-flex items-center gap-1.5 rounded-full bg-good-soft px-3 py-1 text-sm font-semibold text-good">
+                <Check className="h-3.5 w-3.5" aria-hidden /> {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

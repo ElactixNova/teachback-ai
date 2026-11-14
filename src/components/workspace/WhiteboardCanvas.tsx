@@ -229,7 +229,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   );
 
   const toolBtn = (active: boolean) =>
-    `inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
+    `inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
       active ? "bg-card text-ink shadow-[var(--shadow-1)] ring-1 ring-line" : "text-muted hover:bg-accent-soft hover:text-ink"
     }`;
   const divider = <div className="mx-0.5 h-6 w-px bg-line" aria-hidden />;
@@ -245,7 +245,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         }}
       >
         {/* Red margin rule (Figma: Whiteboard Canvas 14:319). */}
-        <div className="pointer-events-none absolute inset-y-0 left-14 w-px bg-[#f3b4b4]" aria-hidden />
+        <div className="pointer-events-none absolute inset-y-0 left-14 w-px bg-[#f2a7a7]" aria-hidden />
         <canvas
           ref={canvasRef}
           className={`absolute inset-0 h-full w-full touch-none ${tool === "eraser" ? "cursor-cell" : "cursor-crosshair"}`}
@@ -262,7 +262,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         )}
 
         {/* Tool Dock (Figma 29:509): floating pill, top centre. */}
-        <div className="absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-full border border-line bg-card/95 px-2 py-1 shadow-[var(--shadow-1)]" role="toolbar" aria-label="Whiteboard tools">
+        <div className="absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-full border border-line bg-card/95 px-2 py-1 shadow-[var(--shadow-1)]" role="toolbar" aria-label="Whiteboard tools">
           <button type="button" className={toolBtn(tool === "pen")} onClick={() => setTool("pen")} title="Pen (P)" aria-label="Pen" aria-pressed={tool === "pen"}>
             <Pen className="h-4 w-4" />
           </button>
@@ -281,7 +281,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
                 setInk(c.value);
                 setTool("pen");
               }}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-accent-soft"
+              className="inline-flex h-9 w-8 items-center justify-center rounded-full hover:bg-accent-soft"
             >
               <span
                 className={`h-5 w-5 rounded-full transition ${ink === c.value && tool === "pen" ? "ring-2 ring-ink ring-offset-2" : ""}`}

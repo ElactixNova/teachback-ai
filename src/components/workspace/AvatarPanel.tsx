@@ -60,13 +60,13 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
         />
 
         {!live && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 pt-6 text-center">
             <p className="max-w-xs text-sm text-white/80">
               {status === "connecting"
                 ? "Waking up Sam, your student…"
                 : status === "error"
                   ? statusDetail || "Could not connect to the avatar."
-                  : "Sam is ready to learn. Teach the topic out loud."}
+                  : "Sam joins when you start the session."}
             </p>
             <button
               type="button"

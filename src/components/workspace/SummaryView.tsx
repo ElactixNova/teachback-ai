@@ -40,7 +40,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
   const learn = gaps.slice(0, MAX_LEARN_IMAGES);
 
   return (
-    <section aria-label="Session summary" className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-card">
+    <section aria-label="Session summary" className="sheet flex h-full min-h-0 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
         <header className="flex flex-wrap items-end gap-4">
           <div className="min-w-0 flex-1">
