@@ -120,7 +120,7 @@ placed = await cards();
 check("full board: note placed beyond the ink and scrolled into view", beyond.status === "written" && /below/.test(beyond.where) && visible(placed[placed.length - 1]), beyond.where);
 
 // 6. A card can be removed.
-await page.locator("[data-sam-note] button").first().click();
+await page.locator("[data-sam-note] button").last().click();
 check("x removes a note", (await cards()).length === placed.length - 1);
 
 await browser.close();
