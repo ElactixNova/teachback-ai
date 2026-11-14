@@ -148,7 +148,9 @@ export function Workspace() {
   // ---- Live marking (T11 decides when; we own the results) ---------------------------------------
   const studentLines = transcript.filter((l) => l.speaker === "student").length;
   const live = useLiveAnalysis({
-    enabled: !!markScheme && view === "board",
+    // Stop live marking the moment a final check starts: disabling aborts the in-flight request, so a late
+    // live result cannot overwrite what the final marking is about to show.
+    enabled: !!markScheme && view === "board" && check.status !== "checking",
     getInput: () => {
       const { markScheme: s, transcript: lines } = latest.current;
       if (!s) return null;

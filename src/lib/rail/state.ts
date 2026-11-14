@@ -220,10 +220,10 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
     active ? `They are explaining now: ${title(active)}.` : "",
     focus.length ? `They chose to work on: ${focus.map((r) => title(r.criterionId)).join("; ")}.` : "",
     followUp
-      ? `FIRST, before moving on, follow up on "${title(followUp.criterionId)}": they have not yet made this point: "${followUp.missingSteps[0]}". Ask ONE short curious question that leads them towards it. Never state it. If they cannot, move on.`
+      ? `FIRST, before moving on, follow up on "${title(followUp.criterionId)}": they have not yet made this point: "${followUp.missingSteps[0]}". Ask ONE short curious question that leads them towards it, and nothing else this turn. Never state it. If they cannot, move on.`
       : "",
     nextUp
-      ? `${followUp ? "After that" : "If they pause"}, move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
+      ? `${followUp ? "Only in a LATER turn, once that follow-up is answered or given up" : "If they pause"}, move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
       : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
     "Start your reply by reacting in a few words to what they just said.",
   ]

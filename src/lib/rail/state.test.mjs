@@ -172,7 +172,7 @@ test("rail status: follow up a partly explained point first, then ask the next p
   const partial = { ...r("c1", "in_progress", 1), missingSteps: ["glucose"], attempts: 0 };
   const text = railStatusText(sch, [partial, r("c2", "not_covered", 0)]);
   assert.match(text, /FIRST, before moving on, follow up on "Inputs and outputs".*"glucose"/);
-  assert.match(text, /After that, move to "Where it happens"\. Ask it in your own words.*Where exactly in the plant/);
+  assert.match(text, /LATER turn.*move to "Where it happens"\. Ask it in your own words.*Where exactly in the plant/);
   assert.match(text, /reacting in a few words/);
   // A point with both tries used is not chased again; a write point asks them to write.
   const used = { ...partial, attempts: 2 };
