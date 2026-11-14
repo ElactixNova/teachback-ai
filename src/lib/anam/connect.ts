@@ -4,7 +4,7 @@ import type { AnamClient, MessageStreamEvent } from "@anam-ai/js-sdk";
 import type { AnamSessionResponse, ApiError } from "@/types/session";
 import type { AvatarHandlers, AvatarSession, Speaker } from "@/components/workspace/types";
 import type { PersonaContext } from "./persona";
-import { extractCues, toUiCue } from "./cues";
+import { extractCues, stripBrackets, toUiCue } from "./cues";
 
 async function fetchSessionToken(ctx: PersonaContext): Promise<string> {
   const res = await fetch("/api/anam-session", {
@@ -38,8 +38,10 @@ function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>)
 
     if (e.endOfSpeech || e.interrupted) {
       buffers.delete(e.id);
-      const { clean, cues } = extractCues(buf.text);
+      const { clean: untagged, cues } = extractCues(buf.text);
       cues.forEach(handlers.onCue);
+      // Sam's lines only: the student may type real brackets (an interval, a matrix).
+      const clean = buf.speaker === "avatar" ? stripBrackets(untagged) : untagged;
       if (buf.speaker === "student" && typed.delete(norm(clean))) return;
       if (clean) handlers.onTranscript(buf.speaker, clean);
     }

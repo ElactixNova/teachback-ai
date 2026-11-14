@@ -5,7 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
-import { boardNote, findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
+import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { admitNote, type NoteRefusal } from "@/lib/board/notes";
 import { connectAnam } from "./connect";
@@ -186,19 +186,19 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         notifyBoard: (state) =>
           session.addContext(
             state === "writing"
-              ? "[BOARD] status: the student is writing or drawing now."
-              : "[BOARD] status: the student stopped writing a few seconds ago.",
+              ? `${PRIVATE_NOTE} Board status: the student is writing or drawing now.`
+              : `${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.`,
           ),
         setFocus: (criteria) => {
           if (!criteria.length) {
-            session.addContext("[RAIL UPDATE, private, do not read out] The student wants to continue with the whole topic again.");
+            session.addContext(`${PRIVATE_NOTE} The student wants to continue with the whole topic again.`);
             return;
           }
           const list = criteria
             .map((c) => `"${c.title}"${c.missingSteps.length ? ` (still missing: ${c.missingSteps.slice(0, 3).join("; ")})` : ""}`)
             .join("; ");
           session.addContext(
-            `[RAIL UPDATE, private, do not read out] The student chose to work on: ${list}. Ask about these first, one at a time, with curious questions; never give the missing points away. Parked points are open again for this.`,
+            `${PRIVATE_NOTE} The student chose to work on: ${list}. Ask about these first, one at a time, with curious questions; never give the missing points away. Parked points are open again for this.`,
           );
         },
       };

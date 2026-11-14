@@ -42,3 +42,24 @@ export function extractCues(text: string): { clean: string; cues: Cue[] } {
     .trim();
   return { clean, cues };
 }
+
+/**
+ * Removes every square-bracketed segment from a line Sam said, so no leaked instruction or stage
+ * direction reaches the chat or the examiner's transcript. Handles nesting; an opening bracket that
+ * never closes takes the rest of the line with it; a stray closing bracket is dropped. A line that
+ * was only brackets comes back empty (the caller drops it).
+ */
+export function stripBrackets(text: string): string {
+  let out = "";
+  let depth = 0;
+  for (const ch of text) {
+    if (ch === "[") depth++;
+    else if (ch === "]") depth = Math.max(0, depth - 1);
+    else if (depth === 0) out += ch;
+  }
+  return out
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,.;:]+/, "")
+    .trim();
+}

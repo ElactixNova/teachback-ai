@@ -7,6 +7,11 @@ import type { CriterionResult, CriterionStatus, GapReport, MarkScheme, TimedLine
 
 /** A criterion is parked once the student has addressed it this many times and still lost marks. */
 export const MAX_ATTEMPTS = 2;
+/**
+ * Prefix of every private context note sent to the avatar (rail changes, board status). Plain words on
+ * purpose: the model echoes square-bracket markup into what it says and writes, so there is none.
+ */
+export const PRIVATE_NOTE = "PRIVATE NOTE (never say or write this):";
 /** Without a transcript, a new quote counts as a new attempt only this long after the last one. */
 export const ATTEMPT_GAP_S = 20;
 
@@ -274,7 +279,7 @@ export function railChangeNote(scheme: MarkScheme, before: CriterionResult[], af
   const boardChanged = unfinishedFlipped || after.some((r) => boardMoved(before.find((b) => b.criterionId === r.criterionId)?.boardObservation, r.boardObservation));
   if (!nowFull.length && !nowParked.length && !boardChanged) return null;
   return [
-    "[RAIL UPDATE, private, do not read out]",
+    PRIVATE_NOTE,
     nowFull.length ? `Now fully explained: ${nowFull.join("; ")}. Do not ask about these again.` : "",
     nowParked.length
       ? `Parked: ${nowParked.join("; ")}. Do not ask about these again; if it fits, say warmly that you will park it for the report and move on.`
