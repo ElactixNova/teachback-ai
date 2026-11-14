@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Eraser, Hand, LoaderCircle, Maximize, Minus, Pen, Plus, ScanSearch, Trash2, Undo2 } from "lucide-react";
+import { Eraser, LoaderCircle, Maximize, Minus, Move, Pen, Plus, ScanSearch, Trash2, Undo2 } from "lucide-react";
 import type { WhiteboardSnapshot } from "@/types/session";
 
 /**
@@ -46,10 +46,10 @@ const ERASER_WIDTH = 28;
 const MAX_EXPORT_EDGE = 1280;
 /** White margin around the strokes in the export, in world px. */
 const EXPORT_PAD = 32;
-const MIN_SCALE = 0.25;
+/** How far you can zoom out: half size keeps handwriting readable on screen. */
+const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
 const GRID = 24;
-const MARGIN_X = 56;
 const CLEAR_TOAST_MS = 6000;
 
 const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
@@ -468,8 +468,6 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           backgroundPosition: `${view.x}px ${view.y}px`,
         }}
       >
-        {/* Red margin rule (Figma: Whiteboard Canvas 14:319); it moves with the board. */}
-        <div className="pointer-events-none absolute inset-y-0 w-px bg-[#f2a7a7]" style={{ left: MARGIN_X * view.scale + view.x }} aria-hidden />
         <canvas
           ref={canvasRef}
           className={`absolute inset-0 h-full w-full touch-none ${cursor}`}
@@ -482,7 +480,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         />
         {!hasInk && !clearedToast && (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-faint">
-            Sketch your diagram or equations here while you explain. Drag with the hand (or hold Space) to move around.
+            Sketch your diagram or equations here while you explain. Use the move tool (or hold Space) to drag the board around.
           </p>
         )}
 
@@ -495,7 +493,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
             <Eraser className="h-4 w-4" />
           </button>
           <button type="button" className={toolBtn(tool === "hand")} onClick={() => setTool("hand")} title="Move the board (H, or hold Space)" aria-label="Move the board" aria-pressed={tool === "hand"}>
-            <Hand className="h-4 w-4" />
+            <Move className="h-4 w-4" />
           </button>
           {divider}
           {INKS.map((c) => (
