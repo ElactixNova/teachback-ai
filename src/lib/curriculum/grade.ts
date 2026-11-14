@@ -90,15 +90,23 @@ export function gradeAll(scheme: MarkScheme, raws: RawResult[], transcript: Time
   return scheme.criteria.map((c) => grade(c, byId.get(c.id), transcript, mode));
 }
 
-/** The criterion with the most marks lost; ties go to the earliest in the scheme. */
+/**
+ * The criterion the student attempted and lost the most marks on; ties go to the earliest in the scheme.
+ * Criteria never covered are "teach these next", not the biggest gap, so they only count when nothing
+ * was attempted at all.
+ */
 export function primaryGap(scheme: MarkScheme, results: CriterionResult[]): string | null {
-  let best: { id: string; lost: number } | null = null;
-  for (const c of scheme.criteria) {
-    const r = results.find((x) => x.criterionId === c.id);
-    const lost = c.marks - (r?.awarded ?? 0);
-    if (lost > 0 && (!best || lost > best.lost)) best = { id: c.id, lost };
-  }
-  return best?.id ?? null;
+  const pick = (attemptedOnly: boolean) => {
+    let best: { id: string; lost: number } | null = null;
+    for (const c of scheme.criteria) {
+      const r = results.find((x) => x.criterionId === c.id);
+      if (attemptedOnly && (!r || r.status === "not_covered")) continue;
+      const lost = c.marks - (r?.awarded ?? 0);
+      if (lost > 0 && (!best || lost > best.lost)) best = { id: c.id, lost };
+    }
+    return best?.id ?? null;
+  };
+  return pick(true) ?? pick(false);
 }
 
 export function buildReport(scheme: MarkScheme, results: CriterionResult[], rawPlan: RawStudyStep[]): GapReport {

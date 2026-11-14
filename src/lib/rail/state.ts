@@ -146,12 +146,20 @@ export function finalizeReport(scheme: MarkScheme, report: GapReport, live: Crit
     return { ...best, status, parked, attempts: lv?.attempts ?? 0 };
   });
 
-  let primary: string | null = null;
-  let worst = 0;
-  for (const c of scheme.criteria) {
-    const lost = c.marks - (results.find((r) => r.criterionId === c.id)?.awarded ?? 0);
-    if (lost > worst) [primary, worst] = [c.id, lost];
-  }
+  // Same rule as grade.ts primaryGap (kept local so this file stays free of server imports): the attempted
+  // criterion that lost the most marks; never-covered ones only count when nothing was attempted.
+  const biggest = (attemptedOnly: boolean) => {
+    let best: string | null = null;
+    let worst = 0;
+    for (const c of scheme.criteria) {
+      const r = results.find((x) => x.criterionId === c.id);
+      if (attemptedOnly && (!r || r.status === "not_covered")) continue;
+      const lost = c.marks - (r?.awarded ?? 0);
+      if (lost > worst) [best, worst] = [c.id, lost];
+    }
+    return best;
+  };
+  const primary = biggest(true) ?? biggest(false);
   const keepPrimary = report.primaryGapId && results.find((r) => r.criterionId === report.primaryGapId)?.status !== "full";
   return {
     ...report,

@@ -77,3 +77,10 @@ test("report: totals and primary gap are computed here, ties go to the earliest"
   assert.equal(report.studyPlan[0].id, "step-1");
   assert.equal(report.studyPlan[0].estimatedMinutes, 90); // clamped
 });
+
+test("primary gap is an attempted criterion, never one the student did not cover", () => {
+  const res = (criterionId, status, awarded) => ({ criterionId, status, awarded, missingSteps: [], attempts: 0, parked: false });
+  assert.equal(primaryGap(scheme, [res("c1", "partial", 1), res("c2", "not_covered", 0)]), "c1"); // c2 lost 2 vs c1's 2: c2 was never attempted
+  assert.equal(primaryGap(scheme, [res("c1", "partial", 2), res("c2", "not_covered", 0)]), "c1"); // c2 lost more, still not attempted
+  assert.equal(primaryGap(scheme, [res("c1", "not_covered", 0), res("c2", "not_covered", 0)]), "c1"); // nothing attempted: biggest loss (c1: 3)
+});
