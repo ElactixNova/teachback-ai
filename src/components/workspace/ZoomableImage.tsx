@@ -66,14 +66,14 @@ export function ZoomableImage({ src, alt, className = "" }: Props) {
     }
   }
 
-  const btn = "inline-flex h-11 items-center gap-1.5 rounded-xl border border-white/30 bg-white/10 px-3.5 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60";
+  const btn = "inline-flex h-11 items-center gap-1.5 rounded-full border border-white/30 bg-white/10 px-3.5 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-60";
 
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} aria-label={`Expand: ${alt}`} className="group relative block w-full cursor-zoom-in text-left">
         {/* eslint-disable-next-line @next/next/no-img-element -- remote fal URL or inline SVG data URI */}
         <img src={src} alt={alt} className={className} />
-        <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-1 text-[11px] font-bold text-muted opacity-90 shadow-sm group-hover:text-ink">
+        <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-1 text-[11px] font-semibold text-muted opacity-90 shadow-sm group-hover:text-ink">
           <Maximize2 className="h-3 w-3" /> Expand
         </span>
       </button>

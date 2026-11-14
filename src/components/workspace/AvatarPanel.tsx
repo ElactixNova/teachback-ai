@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Clock3, LoaderCircle, Mic, MicOff, Send, Video, VideoOff } from "lucide-react";
+import { ArrowRight, Clock3, Frown, LoaderCircle, Mic, MicOff, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
 import type { Cue } from "@/types/session";
 import { ANAM_VIDEO_ID, type AvatarStatus, type TranscriptLine } from "./types";
 
-const CUE_STYLE: Record<Cue, { label: string; className: string }> = {
-  happy: { label: "Following you", className: "bg-accent text-white" },
-  curious: { label: "Curious", className: "bg-sky-600 text-white" },
-  concerned: { label: "Not sure about that", className: "bg-partial text-white" },
-  surprised: { label: "Surprised", className: "bg-violet-600 text-white" },
+/** Sam's mood badge (Figma: Mood Badge 5:77): always icon + words, never colour alone. */
+const CUE_STYLE: Record<Cue, { label: string; className: string; Icon: LucideIcon }> = {
+  happy: { label: "Following you", className: "text-good", Icon: Smile },
+  curious: { label: "Curious", className: "text-[#1f6fd1]", Icon: Sparkle },
+  concerned: { label: "Not sure about that", className: "text-partial", Icon: Frown },
+  surprised: { label: "Surprised", className: "text-[#7a3fd1]", Icon: Sparkle },
 };
 
 /** Detail strings from the bridge that mean "live, but the mic is blocked". */
@@ -49,8 +50,8 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
   const cueStyle = cue ? CUE_STYLE[cue] : null;
 
   return (
-    <section aria-label="Your AI student" className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden rounded-2xl bg-[#0d1b1a] lg:aspect-video">
+    <section aria-label="Your AI student" className="sheet flex min-h-0 flex-1 flex-col gap-3 p-3">
+      <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden rounded-lg bg-stage lg:aspect-video">
         <video
           id={ANAM_VIDEO_ID}
           autoPlay
@@ -59,19 +60,19 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
         />
 
         {!live && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 pt-6 text-center">
             <p className="max-w-xs text-sm text-white/80">
               {status === "connecting"
                 ? "Waking up Sam, your student…"
                 : status === "error"
                   ? statusDetail || "Could not connect to the avatar."
-                  : "Sam is ready to learn. Teach the topic out loud."}
+                  : "Sam joins when you start the session."}
             </p>
             <button
               type="button"
               onClick={onConnect}
               disabled={status === "connecting"}
-              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-bold text-white transition hover:bg-accent-strong disabled:opacity-70"
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:opacity-70"
             >
               {status === "connecting" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
               {status === "error" ? "Try again" : "Start session"}
@@ -81,14 +82,14 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
 
         <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold backdrop-blur ${
-              live ? "bg-red-600/90 text-white" : "bg-white/15 text-white/80"
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur ${
+              live ? "bg-live text-white" : "bg-white/15 text-white/80"
             }`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${live ? "animate-pulse bg-white" : "bg-white/50"}`} />
             {live ? "LIVE" : status === "connecting" ? "Connecting" : "Offline"}
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs font-bold text-white/90 backdrop-blur">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white/90 backdrop-blur">
             {live && !micBlocked ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
             {live && !micBlocked ? "Listening" : "Mic off"}
           </span>
@@ -97,18 +98,23 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
         {cueStyle && (
           <span
             key={cue}
-            className={`absolute right-3 top-3 inline-flex animate-[pulse_1s_ease-out_1] items-center rounded-full px-3 py-1 text-xs font-bold shadow ${cueStyle.className}`}
+            className={`absolute right-3 top-3 inline-flex animate-[pulse_1s_ease-out_1] items-center gap-1.5 rounded-full bg-card px-3 py-1 text-sm font-semibold shadow-[var(--shadow-1)] ${cueStyle.className}`}
             aria-live="polite"
           >
+            <cueStyle.Icon className="h-4 w-4" aria-hidden />
             {cueStyle.label}
           </span>
         )}
+
+        <p className="pointer-events-none absolute bottom-3 left-3 text-sm text-white/85">
+          <span className="font-semibold text-white">Sam</span> · AI student
+        </p>
 
         {live && (
           <button
             type="button"
             onClick={onDisconnect}
-            className="absolute bottom-3 right-3 inline-flex h-9 items-center gap-1.5 rounded-full bg-white/15 px-3 text-xs font-bold text-white backdrop-blur hover:bg-white/25"
+            className="absolute bottom-3 right-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-white/40 bg-black/30 px-3.5 text-sm font-semibold text-white backdrop-blur hover:bg-black/50"
           >
             <VideoOff className="h-3.5 w-3.5" /> End
           </button>
@@ -123,28 +129,29 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
 
       {children}
 
-      <div className="flex min-h-64 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-card lg:min-h-0">
-        <div className="flex items-center justify-between border-b border-line px-4 py-2">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted">Conversation</h2>
-          <span className="text-xs text-faint">{transcript.filter((l) => l.speaker !== "system").length} lines</span>
+      <div className="flex min-h-64 flex-1 flex-col overflow-hidden lg:min-h-0">
+        <div className="flex items-center justify-between px-2 pb-1">
+          <h2 className="text-base font-semibold tracking-[-0.01em]">Transcript</h2>
+          <span className="text-xs text-faint">{live ? "Sam is listening" : transcript.length ? `${transcript.filter((l) => l.speaker !== "system").length} lines` : "Not started"}</span>
         </div>
-        <div ref={listRef} className="min-h-24 flex-1 space-y-2 overflow-y-auto px-3 py-3" aria-live="polite">
+        <div ref={listRef} className="min-h-24 flex-1 space-y-2 overflow-y-auto px-2 py-2" aria-live="polite">
           {transcript.length === 0 ? (
-            <p className="text-sm text-muted">What you say appears here. No mic? Type your explanation below.</p>
+            <p className="text-sm text-muted">Start the session and explain the idea to Sam in your own words. You can also type here.</p>
           ) : (
             transcript.map((l) =>
               l.speaker === "system" ? (
-                <p key={l.id} className="flex items-center justify-center gap-1.5 text-center text-[11px] font-bold text-parked">
+                <p key={l.id} className="flex items-center justify-center gap-1.5 text-center text-[11px] font-semibold text-parked">
                   <Clock3 className="h-3 w-3" /> {l.text}
                 </p>
               ) : (
-                <div key={l.id} className={`flex ${l.speaker === "student" ? "justify-end" : "justify-start"}`}>
+                <div key={l.id} className={`flex flex-col ${l.speaker === "student" ? "items-end" : "items-start"}`}>
+                  <span className="px-1 pb-1 text-xs text-faint">{l.speaker === "student" ? "You" : "Sam"}</span>
                   <p
-                    className={`max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      l.speaker === "student" ? "rounded-br-sm bg-accent text-white" : "rounded-bl-sm bg-canvas text-ink"
+                    className={`max-w-[88%] rounded-lg px-3.5 py-2.5 text-[15px] leading-6 ${
+                      l.speaker === "student" ? "bg-ink text-white" : "bg-sunk text-ink"
                     }`}
                   >
-                    <span className={`mr-1.5 text-[10px] font-bold tabular-nums ${l.speaker === "student" ? "text-white/70" : "text-faint"}`}>{l.t}</span>
+                    <span className={`mr-1.5 text-[10px] font-semibold tabular-nums ${l.speaker === "student" ? "text-white/70" : "text-faint"}`}>{l.t}</span>
                     {l.text}
                   </p>
                 </div>
@@ -153,7 +160,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
           )}
         </div>
         <form
-          className="flex items-end gap-2 border-t border-line p-2"
+          className="flex items-end gap-2 pt-2"
           onSubmit={(e) => {
             e.preventDefault();
             submit();
@@ -172,16 +179,16 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
               }}
               rows={1}
               placeholder="Type part of your explanation…"
-              className="block max-h-28 min-h-11 w-full resize-none rounded-xl border border-line bg-canvas px-3 py-2.5 text-sm outline-none placeholder:text-faint focus:border-accent"
+              className="block max-h-28 min-h-11 w-full resize-none rounded-full border border-line-strong bg-card px-4 py-2.5 text-sm outline-none placeholder:text-faint focus:border-accent"
             />
           </label>
           <button
             type="submit"
             disabled={!draft.trim()}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-white transition hover:bg-accent-strong disabled:opacity-40"
-            aria-label="Send"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-strong disabled:opacity-40"
+            aria-label="Send to Sam"
           >
-            <Send className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4" />
           </button>
         </form>
       </div>

@@ -49,7 +49,7 @@ export function CurriculumUploader({ curriculum, onChange }: Props) {
           <FileText className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold" title={curriculum.title}>
+          <p className="truncate text-sm font-semibold" title={curriculum.title}>
             {curriculum.title}
           </p>
           <p className="text-xs text-muted">
@@ -59,7 +59,7 @@ export function CurriculumUploader({ curriculum, onChange }: Props) {
         <button
           type="button"
           onClick={() => onChange(null)}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-faint hover:bg-canvas hover:text-ink"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-faint hover:bg-canvas hover:text-ink"
           aria-label="Remove lecture notes"
         >
           <X className="h-4 w-4" />
@@ -92,7 +92,7 @@ export function CurriculumUploader({ curriculum, onChange }: Props) {
           {busy ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
         </div>
         <div>
-          <p className="text-sm font-bold">{busy ? "Reading your notes…" : "Upload lecture notes"}</p>
+          <p className="text-sm font-semibold">{busy ? "Reading your notes…" : "Upload lecture notes"}</p>
           <p className="text-xs text-muted">PDF. Drop it here or click to browse</p>
         </div>
       </button>

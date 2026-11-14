@@ -40,18 +40,18 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
   const learn = gaps.slice(0, MAX_LEARN_IMAGES);
 
   return (
-    <section aria-label="Session summary" className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-card">
+    <section aria-label="Session summary" className="sheet flex h-full min-h-0 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
         <header className="flex flex-wrap items-end gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-accent">Final mark · {scheme.topic}</p>
-            <p className="mt-1 text-4xl font-extrabold tabular-nums leading-none">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Final mark · {scheme.topic}</p>
+            <p className="mt-1 text-4xl font-semibold tabular-nums leading-none">
               {report.awarded}
               <span className="text-2xl text-faint"> / {report.total}</span>
-              <span className="ml-3 text-base font-bold text-muted">{pct}%</span>
+              <span className="ml-3 text-base font-semibold text-muted">{pct}%</span>
             </p>
           </div>
-          <button type="button" onClick={onBack} className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-line px-3.5 text-sm font-bold hover:bg-canvas">
+          <button type="button" onClick={onBack} className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-semibold hover:bg-canvas">
             <ArrowLeft className="h-4 w-4" /> Back to session
           </button>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-canvas" role="progressbar" aria-valuemin={0} aria-valuemax={report.total} aria-valuenow={report.awarded} aria-label="Final mark">
@@ -60,7 +60,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
           <ul className="flex flex-wrap gap-2">
             {(["full", "partial", "missed", "parked", "not_covered"] as const).map((s) =>
               count(s) > 0 ? (
-                <li key={s} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-xs font-bold">
+                <li key={s} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-xs font-semibold">
                   <StatusIcon status={s} className="!h-4 !w-4" /> {count(s)} {STATUS_LABEL[s].toLowerCase()}
                 </li>
               ) : null,
@@ -69,7 +69,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
         </header>
 
         <section aria-label="Revision notes" className="space-y-3">
-          <h2 className="text-lg font-extrabold">Revision notes</h2>
+          <h2 className="text-lg font-semibold">Revision notes</h2>
           {gaps.length === 0 && <p className="text-sm text-muted">Full marks on every point. Nothing to revise.</p>}
           {gaps.length > 0 && notes.status === "loading" && (
             <div className="flex items-center gap-3 rounded-2xl border border-line p-4" role="status">
@@ -79,9 +79,9 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
           )}
           {notes.status === "error" && (
             <div className="rounded-2xl border border-missed/30 bg-missed-soft p-4 text-sm" role="alert">
-              <p className="font-bold text-missed">Couldn’t write the revision notes</p>
+              <p className="font-semibold text-missed">Couldn’t write the revision notes</p>
               <p>{notes.error}</p>
-              {onRetryNotes && <button type="button" onClick={onRetryNotes} className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-xl border border-line bg-card px-3 text-xs font-bold">
+              {onRetryNotes && <button type="button" onClick={onRetryNotes} className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-xs font-semibold">
                 <RefreshCw className="h-3.5 w-3.5" /> Try again
               </button>}
             </div>
@@ -93,11 +93,11 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                 <div className="min-w-0">
                   <header className="flex items-start gap-3">
                     <StatusIcon status={displayStatus(r)} className="mt-0.5" />
-                    <h3 className="min-w-0 flex-1 font-extrabold leading-snug">{c.title}</h3>
+                    <h3 className="min-w-0 flex-1 font-semibold leading-snug">{c.title}</h3>
                     <MarksPill result={r} criterion={c} />
                   </header>
                   <p className="mt-2 text-sm font-semibold text-accent">{note.oneLiner}</p>
-                  <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-relaxed marker:font-bold marker:text-faint">
+                  <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-relaxed marker:font-semibold marker:text-faint">
                     {note.steps.map((s, i) => (
                       <li key={i}>{s}</li>
                     ))}
@@ -114,7 +114,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
 
         {learn.length > 0 && (
           <section aria-label="Learn it visually">
-            <h2 className="text-lg font-extrabold">See it, then teach it back</h2>
+            <h2 className="text-lg font-semibold">See it, then teach it back</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {learn.map((g: Gap) => {
                 const s = displayStatus(g.result);
@@ -127,7 +127,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                       <div className="relative">
                         <ZoomableImage src={svgDataUri(note.diagram.svg!)} alt={`Diagram: ${g.criterion.title}`} className="aspect-[4/3] w-full bg-white object-contain" />
                         {v?.status === "loading" && (
-                          <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-bold text-muted">
+                          <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-semibold text-muted">
                             <LoaderCircle className="h-3 w-3 animate-spin" /> Generating…
                           </span>
                         )}
@@ -139,7 +139,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                     )}
                     <div className="flex flex-1 items-center gap-3 p-3">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-extrabold">{g.criterion.title}</p>
+                        <p className="truncate text-sm font-semibold">{g.criterion.title}</p>
                         <p className="text-xs font-semibold text-muted">
                           {STATUS_LABEL[s]} · {g.criterion.marks - g.result.awarded} marks at stake
                         </p>
@@ -147,7 +147,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                       <button
                         type="button"
                         onClick={() => onTeachBack([g.criterion.id])}
-                        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-bold text-accent hover:bg-accent-soft"
+                        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-accent hover:bg-accent-soft"
                       >
                         Teach it back <ArrowRight className="h-4 w-4" />
                       </button>

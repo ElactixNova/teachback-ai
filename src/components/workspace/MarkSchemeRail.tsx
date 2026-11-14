@@ -33,12 +33,12 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
     <section aria-label="Mark scheme" className="flex min-h-0 flex-col gap-3">
       <CurriculumUploader curriculum={curriculum} onChange={onCurriculumChange} />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-card">
+      <div className="sheet flex min-h-0 flex-1 flex-col overflow-hidden">
         <header className="border-b border-line px-4 pb-3 pt-4">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-accent">Mark scheme</p>
-              <h2 className="truncate text-base font-extrabold" title={ready?.topic}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Mark scheme</p>
+              <h2 className="truncate text-base font-semibold" title={ready?.topic}>
                 {ready?.topic || (curriculum ? "Building…" : "No notes yet")}
               </h2>
               {ready && (
@@ -51,7 +51,7 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
               <button
                 type="button"
                 onClick={() => setEditing(structuredClone(ready))}
-                className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-muted hover:bg-canvas hover:text-ink"
+                className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-muted hover:bg-canvas hover:text-ink"
               >
                 <Pencil className="h-3.5 w-3.5" /> Edit
               </button>
@@ -72,7 +72,7 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
                     "Running total"
                   )}
                 </span>
-                <span className="font-extrabold tabular-nums">
+                <span className="font-semibold tabular-nums">
                   {awarded} / {total}
                 </span>
               </div>
@@ -110,7 +110,7 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
               <button
                 type="button"
                 onClick={() => onRebuild(curriculum.topic ?? curriculum.title)}
-                className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-xl border border-line px-3 text-xs font-bold hover:bg-canvas"
+                className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-full border border-line px-3 text-xs font-semibold hover:bg-canvas"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> Try again
               </button>
@@ -136,7 +136,7 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
                   <li key={c.id} className={`flex min-h-14 items-center gap-3 px-4 py-2.5 transition-colors ${tint}`}>
                     <StatusIcon status={s} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold leading-snug">
+                      <p className="text-sm font-semibold leading-snug">
                         <span className="mr-1 text-faint">{i + 1}.</span>
                         {c.title}
                       </p>
@@ -144,7 +144,7 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
                         {sub}
                       </p>
                     </div>
-                    <span className="shrink-0 text-sm font-extrabold tabular-nums">
+                    <span className="shrink-0 text-sm font-semibold tabular-nums">
                       {r?.awarded ?? 0}
                       <span className="font-semibold text-faint"> / {c.marks}</span>
                     </span>
@@ -189,17 +189,17 @@ function SchemeEditor({
   return (
     <div className="space-y-4 px-4 py-4">
       <label className="block">
-        <span className="text-xs font-bold text-muted">Topic</span>
+        <span className="text-xs font-semibold text-muted">Topic</span>
         <div className="mt-1 flex gap-2">
           <input
             value={draft.topic}
             onChange={(e) => onChange({ ...draft, topic: e.target.value })}
-            className="h-11 min-w-0 flex-1 rounded-xl border border-line px-3 text-sm outline-none focus:border-accent"
+            className="h-11 min-w-0 flex-1 rounded-full border border-line px-3 text-sm outline-none focus:border-accent"
           />
           <button
             type="button"
             onClick={() => onRebuild(draft.topic)}
-            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-line px-3 text-xs font-bold hover:bg-canvas"
+            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-line px-3 text-xs font-semibold hover:bg-canvas"
             title="Draft a new mark scheme for this topic"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Redraft
@@ -215,7 +215,7 @@ function SchemeEditor({
               <input
                 value={c.title}
                 onChange={(e) => setCriterion(i, { title: e.target.value })}
-                className="h-10 w-full rounded-lg border border-line px-2.5 text-sm font-bold outline-none focus:border-accent"
+                className="h-10 w-full rounded-lg border border-line px-2.5 text-sm font-semibold outline-none focus:border-accent"
               />
             </label>
             <button
@@ -251,16 +251,16 @@ function SchemeEditor({
             ],
           })
         }
-        className="inline-flex h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-accent hover:bg-accent-soft"
+        className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-accent hover:bg-accent-soft"
       >
         <Plus className="h-4 w-4" /> Add a point
       </button>
 
       <div className="flex gap-2">
-        <button type="button" onClick={save} className="h-11 flex-1 rounded-xl bg-accent text-sm font-bold text-white hover:bg-accent-strong">
+        <button type="button" onClick={save} className="h-11 flex-1 rounded-full bg-accent text-sm font-semibold text-white hover:bg-accent-strong">
           Save mark scheme
         </button>
-        <button type="button" onClick={onCancel} className="h-11 rounded-xl border border-line px-4 text-sm font-bold hover:bg-canvas">
+        <button type="button" onClick={onCancel} className="h-11 rounded-full border border-line px-4 text-sm font-semibold hover:bg-canvas">
           Cancel
         </button>
       </div>

@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, CircleCheck, ImageOff, LoaderCircle, RefreshCw, Sparkles, Square, SquareCheck } from "lucide-react";
+import { ArrowLeft, Check, ImageOff, LoaderCircle, RefreshCw, Sparkles, Square, SquareCheck } from "lucide-react";
 import type { Criterion, CriterionResult, GapReport, MarkScheme } from "@/types/session";
-import { MarksPill, SourceChip, StatusIcon, WORST_FIRST, displayStatus } from "./status";
+import { MarksPill, SEVERITY, ScoreRing, SeverityTag, SourceChip, StatusIcon, WORST_FIRST, displayStatus, verdict } from "./status";
 import type { VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
 
@@ -58,7 +58,7 @@ export function VisualSlot({ state, alt, onRetry, compact }: { state: VisualStat
       <div className={box}>
         <ImageOff className="h-5 w-5" />
         <span>{state.error}</span>
-        <button type="button" onClick={onRetry} className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-line bg-card px-3 font-bold text-ink hover:bg-canvas">
+        <button type="button" onClick={onRetry} className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line bg-card px-3 font-semibold text-ink hover:bg-canvas">
           <RefreshCw className="h-3.5 w-3.5" /> Try again
         </button>
       </div>
@@ -77,30 +77,34 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
   const s = displayStatus(r);
   const missing = new Set(r.missingSteps);
   return (
-    <article className={`rounded-2xl border bg-card p-4 sm:p-5 ${primary ? "border-accent ring-1 ring-accent" : "border-line"}`}>
+    <article className={`relative overflow-hidden rounded-lg border bg-card p-4 pl-5 sm:p-5 sm:pl-6 ${primary ? "border-ink shadow-[var(--shadow-action)]" : "border-line"}`}>
+      <span className={`absolute inset-y-0 left-0 w-1 ${SEVERITY[s]?.bar ?? "bg-line"}`} aria-hidden />
       <header className="flex items-start gap-3">
         <StatusIcon status={s} className="mt-0.5" />
         <div className="min-w-0 flex-1">
-          {primary && <p className="text-[11px] font-bold uppercase tracking-wider text-accent">Biggest gap</p>}
-          <h3 className="font-extrabold leading-snug">{c.title}</h3>
+          {primary && <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Biggest gap</p>}
+          <h3 className="font-semibold leading-snug">{c.title}</h3>
           {s === "parked" && <p className="text-xs font-semibold text-parked">Parked after 2 tries</p>}
         </div>
-        <MarksPill result={r} criterion={c} />
+        <div className="flex shrink-0 items-center gap-2">
+          <SeverityTag status={s} />
+          <MarksPill result={r} criterion={c} />
+        </div>
       </header>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-xl bg-canvas p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             What you said{r.evidence ? ` · ${r.evidence.timestamp}` : ""}
           </p>
           {r.evidence ? (
-            <blockquote className="mt-1.5 text-sm leading-relaxed">“{r.evidence.quote}”</blockquote>
+            <blockquote className="mt-1.5 text-[15px] italic leading-6">“{r.evidence.quote}”</blockquote>
           ) : (
             <p className="mt-1.5 text-sm italic text-muted">You didn’t say anything about this.</p>
           )}
         </div>
         <div className="rounded-xl bg-canvas p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted">What the mark scheme wants</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">What the mark scheme wants</p>
           <ul className="mt-1.5 space-y-1 text-sm leading-relaxed">
             {c.expected.map((e) => (
               <li key={e} className="flex gap-2">
@@ -120,13 +124,13 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
         <dl className="mt-3 space-y-2 text-sm leading-relaxed">
           {r.boardObservation && (
             <div>
-              <dt className="text-[11px] font-bold uppercase tracking-wider text-muted">On your board</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">On your board</dt>
               <dd>{r.boardObservation}</dd>
             </div>
           )}
           {r.fix && (
             <div>
-              <dt className="text-[11px] font-bold uppercase tracking-wider text-accent">How to close it</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-accent">How to close it</dt>
               <dd className="font-semibold">{r.fix}</dd>
             </div>
           )}
@@ -154,20 +158,18 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
   const minutesLeft = report?.studyPlan.reduce((n, s) => n + (s.done ? 0 : s.estimatedMinutes), 0) ?? 0;
 
   return (
-    <section aria-label="Gap notes" className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-card">
+    <section aria-label="Gap notes" className="sheet flex h-full min-h-0 flex-col overflow-hidden">
       <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div className="min-w-0 flex-1">
           {report ? (
             <>
-              <p className="text-lg font-extrabold leading-tight tabular-nums">
-                {report.awarded} / {report.total} marks
-              </p>
-              <p className="text-xs font-semibold text-muted">
-                {gaps.length + notCovered.length === 0 ? "Nothing left to close" : `${gaps.length + notCovered.length} gaps to close`}
+              <h2 className="text-2xl font-semibold leading-tight">Knowledge Gap Report</h2>
+              <p className="text-sm text-muted">
+                <span className="tabular">{report.awarded} / {report.total} marks</span> · checked against your mark scheme
               </p>
             </>
           ) : (
-            <p className="text-lg font-extrabold">Gap notes</p>
+            <p className="text-lg font-semibold">Gap notes</p>
           )}
         </div>
         {report && (
@@ -175,7 +177,7 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
             type="button"
             onClick={onRecheck}
             disabled={checking}
-            className="inline-flex h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-muted hover:bg-canvas hover:text-ink disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-muted hover:bg-canvas hover:text-ink disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${checking ? "animate-spin" : ""}`} /> Re-check
           </button>
@@ -183,18 +185,27 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-line px-3.5 text-sm font-bold hover:bg-canvas"
+          className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-semibold hover:bg-canvas"
         >
           <ArrowLeft className="h-4 w-4" /> Back to whiteboard
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-canvas/60 p-4 sm:p-5">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-canvas p-4 sm:p-5">
+        {report && scheme && (
+          <ScoreSummary
+            awarded={report.awarded}
+            total={report.total}
+            counts={{ missed: gaps.filter((g) => displayStatus(g.result) === "missed").length, partial: gaps.filter((g) => displayStatus(g.result) === "partial").length, parked: gaps.filter((g) => displayStatus(g.result) === "parked").length, not_covered: notCovered.length }}
+            nailed={fullMarks.map((c) => c.title)}
+          />
+        )}
+
         {checking && (
           <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-4" role="status">
             <LoaderCircle className="h-5 w-5 animate-spin text-accent" />
             <div>
-              <p className="text-sm font-bold">Marking against your mark scheme…</p>
+              <p className="text-sm font-semibold">Marking against your mark scheme…</p>
               <p className="text-xs text-muted">Checking every point with quotes from what you said. About 15 seconds.</p>
             </div>
           </div>
@@ -202,9 +213,9 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
 
         {check.status === "error" && (
           <div className="rounded-2xl border border-missed/30 bg-missed-soft p-4 text-sm" role="alert">
-            <p className="font-bold text-missed">The check didn’t finish</p>
+            <p className="font-semibold text-missed">The check didn’t finish</p>
             <p className="mt-0.5">{check.error}</p>
-            <button type="button" onClick={onRecheck} className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-xl border border-line bg-card px-3 text-xs font-bold hover:bg-canvas">
+            <button type="button" onClick={onRecheck} className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-xs font-semibold hover:bg-canvas">
               <RefreshCw className="h-3.5 w-3.5" /> Try again
             </button>
           </div>
@@ -229,20 +240,20 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
 
         {report && notCovered.length > 0 && (
           <article className="rounded-2xl border border-dashed border-line bg-card p-4 sm:p-5">
-            <h3 className="font-extrabold">Not covered yet</h3>
+            <h3 className="font-semibold">Not covered yet</h3>
             <ul className="mt-2 space-y-1.5 text-sm">
               {notCovered.map((c) => (
                 <li key={c.id} className="flex items-center gap-2">
                   <StatusIcon status="not_covered" />
                   <span className="flex-1">{c.title}</span>
-                  <span className="text-xs font-bold text-faint">{c.marks} marks</span>
+                  <span className="text-xs font-semibold text-faint">{c.marks} marks</span>
                 </li>
               ))}
             </ul>
             <button
               type="button"
               onClick={() => onTeachNext(notCovered.map((c) => c.id))}
-              className="mt-3 inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-bold text-white hover:bg-accent-strong"
+              className="mt-3 inline-flex h-11 items-center gap-2 rounded-full bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong"
             >
               <Sparkles className="h-4 w-4" /> Teach these next
             </button>
@@ -252,7 +263,7 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
         {report && report.studyPlan.length > 0 && (
           <article className="rounded-2xl border border-line bg-card p-4 sm:p-5">
             <div className="flex items-baseline justify-between">
-              <h3 className="font-extrabold">Study plan</h3>
+              <h3 className="font-semibold">Study plan</h3>
               <span className="text-xs font-semibold text-muted">{minutesLeft} min left</span>
             </div>
             <ul className="mt-2 space-y-1">
@@ -261,7 +272,7 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
                   <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-canvas">
                     <input type="checkbox" checked={!!s.done} onChange={() => onToggleStep(s.id)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
                     <span className="min-w-0 flex-1">
-                      <span className={`block text-sm font-bold ${s.done ? "text-faint line-through" : ""}`}>{s.title}</span>
+                      <span className={`block text-sm font-semibold ${s.done ? "text-faint line-through" : ""}`}>{s.title}</span>
                       <span className="block text-xs text-muted">{s.detail}</span>
                     </span>
                     <span className="shrink-0 text-xs font-semibold text-faint">{s.estimatedMinutes} min</span>
@@ -272,15 +283,58 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
           </article>
         )}
 
-        {report && fullMarks.length > 0 && (
-          <p className="flex items-start gap-2 px-1 text-sm text-muted">
-            <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-            <span>
-              <span className="font-bold text-ink">Full marks:</span> {fullMarks.map((c) => c.title).join(" · ")}
-            </span>
-          </p>
-        )}
       </div>
     </section>
+  );
+}
+
+type Counts = { missed: number; partial: number; parked: number; not_covered: number };
+
+/** Report header (Figma Report / Filled): score ring + verdict, severity breakdown bar, "You nailed" chips. */
+function ScoreSummary({ awarded, total, counts, nailed }: { awarded: number; total: number; counts: Counts; nailed: string[] }) {
+  const parts = (Object.keys(counts) as (keyof Counts)[]).filter((k) => counts[k] > 0);
+  const gapCount = parts.reduce((n, k) => n + counts[k], 0);
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-5">
+        <ScoreRing awarded={awarded} total={total} />
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold">{verdict(awarded, total)}</h2>
+          <p className="mt-1 text-[15px] leading-6 text-muted">
+            {gapCount === 0 ? "Every point on the mark scheme is covered." : `${gapCount} ${gapCount === 1 ? "point" : "points"} to close. The biggest gap is first, with what you said and how to fix it.`}
+          </p>
+        </div>
+      </div>
+      {gapCount > 0 && (
+        <div>
+          <div className="flex gap-1" aria-hidden>
+            {parts.flatMap((k) => Array.from({ length: counts[k] }, (_, i) => <span key={`${k}${i}`} className={`h-1.5 flex-1 rounded-full ${SEVERITY[k]?.bar}`} />))}
+          </div>
+          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+            {parts.map((k) => (
+              <span key={k} className="inline-flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${SEVERITY[k]?.bar}`} aria-hidden />
+                {counts[k]} {SEVERITY[k]?.label.toLowerCase()}
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
+      {nailed.length > 0 && (
+        <div>
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-base font-semibold">You nailed</h3>
+            <span className="text-sm text-faint">{nailed.length}</span>
+          </div>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {nailed.map((t) => (
+              <li key={t} className="inline-flex items-center gap-1.5 rounded-full bg-good-soft px-3 py-1 text-sm font-semibold text-good">
+                <Check className="h-3.5 w-3.5" aria-hidden /> {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

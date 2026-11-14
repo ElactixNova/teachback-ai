@@ -22,10 +22,10 @@ export interface WhiteboardHandle {
 }
 
 const INKS = [
-  { name: "Ink", value: "#12201f" },
-  { name: "Blue", value: "#2563eb" },
-  { name: "Red", value: "#dc2626" },
-  { name: "Green", value: "#15803d" },
+  { name: "Black", value: "#14142b" },
+  { name: "Indigo", value: "#5b5ce6" },
+  { name: "Pink", value: "#ec4899" },
+  { name: "Green", value: "#10a36b" },
 ];
 const ERASER_WIDTH = 28;
 /** Longest edge of the exported PNG, to keep the analyze payload small. */
@@ -229,98 +229,23 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   );
 
   const toolBtn = (active: boolean) =>
-    `inline-flex h-11 w-11 items-center justify-center rounded-lg transition-colors ${
-      active ? "bg-accent text-white" : "text-muted hover:bg-canvas"
+    `inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
+      active ? "bg-card text-ink shadow-[var(--shadow-1)] ring-1 ring-line" : "text-muted hover:bg-accent-soft hover:text-ink"
     }`;
+  const divider = <div className="mx-0.5 h-6 w-px bg-line" aria-hidden />;
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-card">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-1.5">
-        <div className="flex items-center gap-1" role="toolbar" aria-label="Whiteboard tools">
-          <button type="button" className={toolBtn(tool === "pen")} onClick={() => setTool("pen")} title="Pen" aria-pressed={tool === "pen"}>
-            <Pen className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            className={toolBtn(tool === "eraser")}
-            onClick={() => setTool("eraser")}
-            title="Eraser"
-            aria-pressed={tool === "eraser"}
-          >
-            <Eraser className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="mx-1 h-6 w-px bg-line" />
-
-        <div className="flex items-center gap-1.5">
-          {INKS.map((c) => (
-            <button
-              key={c.value}
-              type="button"
-              title={c.name}
-              aria-label={`${c.name} ink`}
-              aria-pressed={ink === c.value && tool === "pen"}
-              onClick={() => {
-                setInk(c.value);
-                setTool("pen");
-              }}
-              className={`h-6 w-6 rounded-full ring-offset-2 transition ${
-                ink === c.value && tool === "pen" ? "ring-2 ring-accent" : "hover:scale-110"
-              }`}
-              style={{ backgroundColor: c.value }}
-            />
-          ))}
-        </div>
-
-        <div className="mx-1 h-6 w-px bg-line" />
-
-        <div className="flex items-center gap-1">
-          {[2, 4, 7].map((w) => (
-            <button
-              key={w}
-              type="button"
-              title={`Stroke ${w}px`}
-              aria-pressed={penWidth === w}
-              onClick={() => {
-                setPenWidth(w);
-                setTool("pen");
-              }}
-              className={toolBtn(penWidth === w && tool === "pen")}
-            >
-              <span className="rounded-full bg-current" style={{ width: w + 2, height: w + 2 }} />
-            </button>
-          ))}
-        </div>
-
-        <div className="mx-1 h-6 w-px bg-line" />
-
-        <button type="button" className={toolBtn(false)} onClick={undo} disabled={!hasInk} title="Undo (Ctrl+Z)">
-          <Undo2 className="h-4 w-4" />
-        </button>
-        <button type="button" className={toolBtn(false)} onClick={clear} disabled={!hasInk} title="Clear board">
-          <Trash2 className="h-4 w-4" />
-        </button>
-
-        <button
-          type="button"
-          onClick={onSnapAndCheck}
-          disabled={checking}
-          className="ml-auto inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-bold text-white transition hover:bg-accent-strong disabled:cursor-wait disabled:opacity-70"
-        >
-          {checking ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
-          {checking ? "Checking…" : "Snap & Check"}
-        </button>
-      </div>
-
+    <section aria-label="Whiteboard" className="sheet relative flex h-full min-h-0 flex-col overflow-hidden">
       <div
         ref={wrapRef}
         className="relative min-h-0 flex-1 bg-white"
         style={{
-          backgroundImage: "radial-gradient(circle, #dde5e4 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
+          backgroundImage: "radial-gradient(circle, #a9abd9 1px, transparent 1.2px)",
+          backgroundSize: "24px 24px",
         }}
       >
+        {/* Red margin rule (Figma: Whiteboard Canvas 14:319). */}
+        <div className="pointer-events-none absolute inset-y-0 left-14 w-px bg-[#f2a7a7]" aria-hidden />
         <canvas
           ref={canvasRef}
           className={`absolute inset-0 h-full w-full touch-none ${tool === "eraser" ? "cursor-cell" : "cursor-crosshair"}`}
@@ -335,6 +260,80 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
             Sketch your diagram or equations here while you explain.
           </p>
         )}
+
+        {/* Tool Dock (Figma 29:509): floating pill, top centre. */}
+        <div className="absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-full border border-line bg-card/95 px-2 py-1 shadow-[var(--shadow-1)]" role="toolbar" aria-label="Whiteboard tools">
+          <button type="button" className={toolBtn(tool === "pen")} onClick={() => setTool("pen")} title="Pen (P)" aria-label="Pen" aria-pressed={tool === "pen"}>
+            <Pen className="h-4 w-4" />
+          </button>
+          <button type="button" className={toolBtn(tool === "eraser")} onClick={() => setTool("eraser")} title="Eraser (E)" aria-label="Eraser" aria-pressed={tool === "eraser"}>
+            <Eraser className="h-4 w-4" />
+          </button>
+          {divider}
+          {INKS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              title={`${c.name} ink`}
+              aria-label={`${c.name} ink`}
+              aria-pressed={ink === c.value && tool === "pen"}
+              onClick={() => {
+                setInk(c.value);
+                setTool("pen");
+              }}
+              className="inline-flex h-9 w-8 items-center justify-center rounded-full hover:bg-accent-soft"
+            >
+              <span
+                className={`h-5 w-5 rounded-full transition ${ink === c.value && tool === "pen" ? "ring-2 ring-ink ring-offset-2" : ""}`}
+                style={{ backgroundColor: c.value }}
+              />
+            </button>
+          ))}
+          {divider}
+          {[2, 4, 7].map((w) => (
+            <button
+              key={w}
+              type="button"
+              title={`Stroke ${w}px`}
+              aria-label={`Stroke width ${w}`}
+              aria-pressed={penWidth === w}
+              onClick={() => {
+                setPenWidth(w);
+                setTool("pen");
+              }}
+              className={toolBtn(penWidth === w && tool === "pen")}
+            >
+              <span className="rounded-full bg-current" style={{ width: w + 2, height: w + 2 }} />
+            </button>
+          ))}
+          {divider}
+          <button type="button" className={toolBtn(false)} onClick={undo} disabled={!hasInk} title="Undo (Ctrl+Z)" aria-label="Undo">
+            <Undo2 className="h-4 w-4" />
+          </button>
+          <button type="button" className={toolBtn(false)} onClick={clear} disabled={!hasInk} title="Clear board" aria-label="Clear board">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Bottom row: label + state on the left, Snap & Check (Figma 29:508) on the right. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 pl-[72px]">
+          <p className="flex items-baseline gap-2">
+            <span className="text-base font-semibold tracking-[-0.01em]">Whiteboard</span>
+            <span className="text-xs text-faint">{checking ? "Checking" : hasInk ? "In use" : "Empty"}</span>
+          </p>
+          <button
+            type="button"
+            onClick={onSnapAndCheck}
+            disabled={checking}
+            className="action pointer-events-auto inline-flex min-h-12 items-center gap-3 rounded-full bg-accent px-5 py-1.5 text-left text-white transition hover:bg-accent-strong disabled:cursor-wait disabled:opacity-80"
+          >
+            {checking ? <LoaderCircle className="h-5 w-5 shrink-0 animate-spin" /> : <ScanSearch className="h-5 w-5 shrink-0" />}
+            <span className="leading-tight">
+              <span className="block text-base font-semibold">{checking ? "Checking…" : "Snap & Check"}</span>
+              <span className="block text-xs text-white/80">{checking ? "Comparing with your mark scheme" : "Board + transcript vs your mark scheme"}</span>
+            </span>
+          </button>
+        </div>
       </div>
     </section>
   );
