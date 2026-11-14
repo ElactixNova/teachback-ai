@@ -9,6 +9,7 @@ export interface RawResult {
   awarded: number;
   evidence: { quote: string } | null;
   boardObservation: string | null;
+  boardUnfinished?: boolean | null;
   missingSteps: string[];
   fix: string | null;
 }
@@ -80,6 +81,7 @@ function grade(c: Criterion, raw: RawResult | undefined, transcript: TimedLine[]
     missingSteps: missing,
     ...(evidence ? { evidence } : {}),
     ...(raw.boardObservation ? { boardObservation: raw.boardObservation } : {}),
+    ...(typeof raw.boardUnfinished === "boolean" ? { boardUnfinished: raw.boardUnfinished } : {}),
     ...(raw.fix && status !== "full" ? { fix: raw.fix } : {}),
   };
 }

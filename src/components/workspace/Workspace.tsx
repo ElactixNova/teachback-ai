@@ -65,6 +65,13 @@ export function Workspace() {
   useEffect(() => () => {
     if (writingTimer.current) clearTimeout(writingTimer.current);
   }, []);
+  // Tell the avatar (private context) when the student starts and stops writing; never on first render.
+  const wroteBefore = useRef(false);
+  useEffect(() => {
+    if (writing) wroteBefore.current = true;
+    else if (!wroteBefore.current) return;
+    sessionRef.current?.notifyBoard?.(writing ? "writing" : "idle");
+  }, [writing]);
   const sessionStart = useRef<number | null>(null);
 
   const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>("idle");

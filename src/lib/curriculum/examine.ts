@@ -12,6 +12,7 @@ const RawResultSchema = z.object({
   awarded: z.number(),
   evidence: z.object({ quote: z.string() }).nullable(),
   boardObservation: z.string().nullable(),
+  boardUnfinished: z.boolean().nullable(),
   missingSteps: z.array(z.string()),
   fix: z.string().nullable(),
 });
@@ -37,6 +38,7 @@ Rules:
 - boardObservation: describe only what is visibly on the whiteboard, including steps that are missing between lines. Transcribe equations and formulas exactly as written (for example "CO2 + H2O -> C6H12O6 + O2"), do not silently correct them.
 - Check the correctness of anything written, not just its presence. For a chemical equation, count the atoms of every element on each side: if they differ it is NOT balanced, so it earns no mark for a step that needs a balanced or correct equation, and \`fix\` must say which element is unbalanced. The same goes for wrong coefficients, units, signs or arithmetic. A step whose wording is only "states the equation" still needs the equation to be correct. If the handwriting is too unclear to check, say so in boardObservation and do not award the mark.
 - If the student made a claim about a criterion that contradicts or misstates it (for example saying glucose is made in the roots when the criterion is about where photosynthesis happens), that criterion was addressed: status is missed (or partial if some steps were right), never not_covered. Quote the wrong claim as evidence and say in \`fix\` what was wrong.
+- boardUnfinished: true when what is on the whiteboard looks unfinished or cut off, so the student is probably midway or thinking (an equation with no right-hand side or a trailing operator, a half-drawn diagram, a label with no arrow, a formula missing its last term); false when the board is empty or looks complete. Use the same value on every result.
 - missingSteps: copy them verbatim from \`expected\`.
 - fix: one or two sentences the student could say out loud to earn the missing marks. Don't lecture.
 - primaryGapId: the criterion with the most marks lost (ties: the earliest in the scheme).
