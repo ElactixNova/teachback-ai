@@ -4,7 +4,7 @@
 // Director Notes cues through AvatarHandlers.
 import type { AnamClient, MessageStreamEvent } from "@anam-ai/js-sdk";
 import type { AnamSessionResponse, ApiError, GapReport } from "@/types/session";
-import type { AvatarBridge, AvatarHandlers, Speaker, WorkspaceActions } from "@/components/workspace/types";
+import type { AvatarBridge, AvatarHandlers, AvatarSession, Speaker, WorkspaceActions } from "@/components/workspace/types";
 import type { PersonaContext } from "./persona";
 import { extractCues, toUiCue } from "./cues";
 import { TOOL } from "./tools";
@@ -31,8 +31,13 @@ function summariseReport(r: GapReport): string {
   }. Gaps: ${gaps}. Tell the student their score and the most important gap in one or two sentences, as a curious student would, without reading this out. Only talk about the gaps listed here; do not add corrections of your own.`;
 }
 
-/** Turn streamed message chunks into whole transcript lines, and surface cues as they arrive. */
-function createTranscriptCollector(handlers: AvatarHandlers) {
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Turn streamed message chunks into whole transcript lines, and surface cues as they arrive.
+ * `typed` holds lines sent with sendText: the workspace already shows them, so their echo is skipped.
+ */
+function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>) {
   const buffers = new Map<string, { speaker: Speaker; text: string }>();
   return (e: MessageStreamEvent) => {
     const speaker: Speaker = String(e.role) === "user" ? "student" : "avatar";
@@ -47,12 +52,13 @@ function createTranscriptCollector(handlers: AvatarHandlers) {
       buffers.delete(e.id);
       const { clean, cues } = extractCues(buf.text);
       cues.forEach(handlers.onCue);
+      if (buf.speaker === "student" && typed.delete(norm(clean))) return;
       if (clean) handlers.onTranscript(buf.speaker, clean);
     }
   };
 }
 
-function registerTools(client: AnamClient, actions: WorkspaceActions, state: { report: GapReport | null }) {
+function registerTools(client: AnamClient, actions: WorkspaceActions) {
   const unregister = [
     client.registerToolCallHandler(TOOL.captureWhiteboard, {
       onStart: async () => {
@@ -63,22 +69,27 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, state: { r
     }),
     client.registerToolCallHandler(TOOL.openGapReport, {
       onStart: async (p) => {
-        if (p.arguments?.reuse_last && state.report) {
+        const last = actions.getReport();
+        if (p.arguments?.reuse_last && last) {
           actions.openGapReport();
-          return summariseReport(state.report);
+          return summariseReport(last);
         }
         const report = await actions.checkExplanation();
         if (!report) return "The check could not run: the student has not explained anything yet, or the check failed. Ask them to explain a bit more first.";
-        state.report = report;
         return summariseReport(report);
       },
     }),
     client.registerToolCallHandler(TOOL.generateVisualExplainer, {
       onStart: async (p) => {
-        const r = state.report;
-        if (!r || r.gaps.length === 0) {
-          return `There is no report with gaps yet. Offer to check their explanation with ${TOOL.openGapReport} first.`;
+        let r = actions.getReport();
+        if (!r) {
+          // No report yet: run the check; the workspace then starts the visual for the top gap itself.
+          r = await actions.checkExplanation();
+          if (!r) return "The check could not run: the student has not explained anything yet. Ask them to explain a bit first.";
+          if (r.gaps.length === 0) return `${summariseReport(r)} There are no gaps, so no visual is needed.`;
+          return `${summariseReport(r)} A visual for the most important gap is being generated and will appear in the report in a few seconds.`;
         }
+        if (r.gaps.length === 0) return "The latest report has no gaps, so there is nothing to illustrate. Tell the student they did well.";
         const wanted = typeof p.arguments?.concept === "string" ? p.arguments.concept.toLowerCase().trim() : "";
         const gap = wanted
           ? r.gaps.find((g) => g.concept.toLowerCase().includes(wanted) || wanted.includes(g.concept.toLowerCase()))
@@ -95,11 +106,12 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, state: { r
 /** Create a bridge. `getContext` scopes the persona (topic + notes) at connect time. */
 export function createAnamAvatarBridge(getContext: () => PersonaContext = () => ({})): AvatarBridge {
   return {
-    async connect({ videoElementId, actions, handlers }) {
+    async connect({ videoElementId, actions, handlers }): Promise<AvatarSession> {
       handlers.onStatus("connecting");
       let client: AnamClient | null = null;
       let closedByUs = false;
       let cleanupTools = () => {};
+      const typed = new Set<string>();
 
       const disconnect = () => {
         closedByUs = true;
@@ -117,14 +129,15 @@ export function createAnamAvatarBridge(getContext: () => PersonaContext = () => 
         client = c;
 
         // Register listeners and tool handlers before streaming so nothing is missed.
-        c.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, createTranscriptCollector(handlers));
+        c.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, createTranscriptCollector(handlers, typed));
         c.addListener(AnamEvent.DIRECTOR_NOTE_CUE_APPLIED, (ev) => {
           const cue = toUiCue(ev.cueTag);
           if (cue) handlers.onCue(cue);
         });
         c.addListener(AnamEvent.VIDEO_PLAY_STARTED, () => handlers.onStatus("live"));
+        // Stay live without a mic: the video keeps playing and typed lines still reach the avatar.
         c.addListener(AnamEvent.MIC_PERMISSION_DENIED, () =>
-          handlers.onStatus("error", "Microphone blocked. Allow mic access, or type your explanation below."),
+          handlers.onStatus("live", "Microphone blocked. Type your explanation below."),
         );
         c.addListener(AnamEvent.CONNECTION_CLOSED, (reason, details) => {
           cleanupTools();
@@ -133,7 +146,7 @@ export function createAnamAvatarBridge(getContext: () => PersonaContext = () => 
         });
         c.addListener(AnamEvent.TOOL_CALL_FAILED, (ev) => console.warn("[anam] tool failed", ev.toolName, ev.errorMessage));
 
-        cleanupTools = registerTools(c, actions, { report: null });
+        cleanupTools = registerTools(c, actions);
 
         await c.streamToVideoElement(videoElementId);
         if (!closedByUs) handlers.onStatus("live");
@@ -144,7 +157,18 @@ export function createAnamAvatarBridge(getContext: () => PersonaContext = () => 
         handlers.onStatus("error", e instanceof Error ? e.message : "Could not start the avatar.");
       }
 
-      return { disconnect };
+      const sendText = (text: string) => {
+        if (!client?.isStreaming()) return;
+        typed.add(norm(text));
+        try {
+          client.sendUserMessage(text);
+        } catch (e) {
+          typed.delete(norm(text));
+          console.warn("[anam] sendUserMessage failed", e);
+        }
+      };
+
+      return { disconnect, sendText };
     },
   };
 }
