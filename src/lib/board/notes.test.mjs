@@ -1,7 +1,7 @@
 // Run: node --test src/lib/board/notes.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { admitNote, describeSpot, layoutScript, placeNote, plainMath, revealScript, shiftIntoView, spokenLength, startClock, writeProgress, FINISH_MS, MAX_NOTES_PER_SESSION, MAX_WRITE_MS, MIN_WRITE_MS } from "./notes.ts";
+import { admitNote, describeSpot, layoutScript, placeNote, plainMath, revealScript, shiftIntoView, spokenLength, startClock, viewToShow, writeProgress, FINISH_MS, MAX_NOTES_PER_SESSION, MAX_WRITE_MS, MIN_WRITE_MS } from "./notes.ts";
 
 const overlaps = (a, b, m = 0) => a.x < b.x + b.w + m && a.x + a.w + m > b.x && a.y < b.y + b.h + m && a.y + a.h + m > b.y;
 const inside = (r, v) => r.x >= v.x && r.y >= v.y && r.x + r.w <= v.x + v.w && r.y + r.h <= v.y + v.h;
@@ -53,19 +53,36 @@ test("plainMath: readable text for the accessible label", () => {
   assert.equal(plainMath("6CO_{2} + 6H_{2}O \\to \\text{glucose}"), "6CO_2 + 6H_2O → glucose");
 });
 
-test("admitNote: sanitises, and enforces length, repeat, pace and session limits", () => {
-  const ok = admitNote({ content: "  $x^2 +\n5x + 6 = 0$ ", kind: "math", label: " Question 1 " }, [], 0);
+test("admitNote: sanitises and enforces length, safety and the session cap; repeats and pace are not refused", () => {
+  const ok = admitNote({ content: "  $x^2 +\n5x + 6 = 0$ ", kind: "math", label: " Question 1 " }, 0);
   assert.deepEqual(ok, { ok: true, note: { content: "x^2 + 5x + 6 = 0", kind: "math", label: "Question 1" } });
-  assert.deepEqual(admitNote({ content: " \n ", kind: "text" }, [], 0), { ok: false, reason: "empty" });
-  assert.deepEqual(admitNote({ content: "x".repeat(201), kind: "math" }, [], 0), { ok: false, reason: "too_long" });
-  assert.deepEqual(admitNote({ content: "\\href{http://x}{y}", kind: "math" }, [], 0), { ok: false, reason: "unsafe" });
-  assert.equal(admitNote({ content: "<b>hi</b>", kind: "text" }, [], 0).note.content, "b hi /b");
-  const one = [{ content: "x^2 = 4", at: 1000 }];
-  assert.deepEqual(admitNote({ content: "x^2 = 4", kind: "math" }, one, 60_000), { ok: false, reason: "duplicate" });
-  assert.deepEqual(admitNote({ content: "x^2 = 9", kind: "math" }, one, 8999), { ok: false, reason: "too_soon" });
-  assert.equal(admitNote({ content: "x^2 = 9", kind: "math" }, one, 9000).ok, true);
-  const six = Array.from({ length: MAX_NOTES_PER_SESSION }, (_, i) => ({ content: `q${i}`, at: i * 10_000 }));
-  assert.deepEqual(admitNote({ content: "one more", kind: "text" }, six, 1e9), { ok: false, reason: "limit" });
+  assert.deepEqual(admitNote({ content: " \n ", kind: "text" }, 0), { ok: false, reason: "empty" });
+  assert.deepEqual(admitNote({ content: "x".repeat(201), kind: "math" }, 0), { ok: false, reason: "too_long" });
+  assert.deepEqual(admitNote({ content: "\\href{http://x}{y}", kind: "math" }, 0), { ok: false, reason: "unsafe" });
+  assert.equal(admitNote({ content: "<b>hi</b>", kind: "text" }, 0).note.content, "b hi /b");
+  assert.equal(admitNote({ content: "x^2 = 9", kind: "math" }, MAX_NOTES_PER_SESSION - 1).ok, true);
+  assert.deepEqual(admitNote({ content: "one more", kind: "text" }, MAX_NOTES_PER_SESSION), { ok: false, reason: "limit" });
+  assert.ok(MAX_NOTES_PER_SESSION >= 30);
+});
+
+test("viewToShow: leaves a visible rectangle alone, pans the least it can, zooms out only when it must", () => {
+  const screen = { w: 800, h: 600, top: 64, bottom: 88 };
+  const view = { x: 0, y: 0, scale: 1 };
+  // Already fully visible: nothing moves.
+  assert.deepEqual(viewToShow({ x: 100, y: 150, w: 300, h: 200 }, view, screen, 24, 0.5), view);
+  // Below the visible board: pan up just enough to leave the margin above the controls.
+  const down = viewToShow({ x: 100, y: 500, w: 300, h: 200 }, view, screen, 24, 0.5);
+  assert.deepEqual(down, { x: 0, y: -(700 - (600 - 88 - 24)), scale: 1 });
+  // Left of the visible board, at 2x zoom and panned.
+  const left = viewToShow({ x: -200, y: 100, w: 100, h: 100 }, { x: 0, y: 0, scale: 2 }, screen, 24, 0.5);
+  assert.equal(left.scale, 2);
+  assert.equal(-200 * 2 + left.x, 24);
+  // Taller than the visible board: zoom out until question and writing room fit, and they do.
+  const tall = viewToShow({ x: 0, y: 0, w: 300, h: 800 }, view, screen, 24, 0.5);
+  assert.ok(tall.scale < 1 && tall.scale >= 0.5);
+  assert.ok(0 * tall.scale + tall.y >= 64 + 24 - 1e-9 && 800 * tall.scale + tall.y <= 600 - 88 - 24 + 1e-9);
+  // Never past the zoom limit, even for something enormous.
+  assert.equal(viewToShow({ x: 0, y: 0, w: 5000, h: 5000 }, view, screen, 24, 0.5).scale, 0.5);
 });
 
 // ---- handwriting ----

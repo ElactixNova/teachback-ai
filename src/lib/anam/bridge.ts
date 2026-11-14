@@ -7,7 +7,8 @@ import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
 import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
-import { admitNote, type NoteRefusal } from "@/lib/board/notes";
+import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
+import { spokenToLatex } from "@/lib/math/spoken";
 import { connectAnam } from "./connect";
 import { TOOL } from "./tools";
 
@@ -33,20 +34,10 @@ export function summariseFinal(scheme: MarkScheme | null, r: GapReport): string 
     .join(" ");
 }
 
-/** Why a note was not written. Plain facts: the avatar must be able to carry on without reading them out. */
-const NOTE_REFUSED: Record<NoteRefusal, string> = {
-  empty: "Nothing was written: the note had no content.",
-  too_long: "Nothing was written: the note was longer than 200 characters. A shorter version of the question fits.",
-  unsafe: "Nothing was written: the note contained a command the board cannot show.",
-  duplicate: "Nothing new was written: the same question is already on the board.",
-  too_soon: "Nothing was written: another note went on the board a few seconds ago.",
-  limit: "Nothing was written: the board already holds the six notes allowed in one session.",
-};
-
 /** A check that finished this recently is reused instead of marking again. */
 const RECENT_CHECK_MS = 20_000;
 
-function registerTools(client: AnamClient, actions: WorkspaceActions): () => void {
+function registerTools(client: AnamClient, actions: WorkspaceActions, questions: QuestionWriter): () => void {
   // The LLM sometimes calls the check twice in a row ("I'm finished" ... "check me").
   // Share one in-flight final marking and reuse a fresh result, so we never pay twice.
   let inflight: Promise<GapReport | null> | null = null;
@@ -64,20 +55,10 @@ function registerTools(client: AnamClient, actions: WorkspaceActions): () => voi
     return inflight;
   };
 
-  // Notes written in this session, for the pace, repeat and session limits.
-  const written: { content: string; at: number }[] = [];
-
   const unregister = [
     client.registerToolCallHandler(TOOL.writeOnBoard, {
-      onStart: async (p) => {
-        const verdict = admitNote({ content: arg(p, "content"), kind: arg(p, "kind") === "text" ? "text" : "math", label: arg(p, "label") || undefined }, written, Date.now());
-        if (!verdict.ok) return NOTE_REFUSED[verdict.reason];
-        written.push({ content: verdict.note.content, at: Date.now() });
-        const out = actions.writeOnBoard(verdict.note);
-        if (out.status === "written") return `The question is now on the board, ${out.where}, where the student can read it.`;
-        if (out.status === "queued") return "The student is drawing right now, so the question is queued and will appear on the board when they pause.";
-        return "The board is not visible right now (the student is looking at their results); the question will appear when they return to the board.";
-      },
+      // The writer decides what goes on the board: her last question when the student asked to see it.
+      onStart: async (p) => questions.tool({ content: arg(p, "content"), kind: arg(p, "kind") === "text" ? "text" : "math", label: arg(p, "label") || undefined }),
     }),
     client.registerToolCallHandler(TOOL.getRailStatus, {
       onStart: async () => {
@@ -159,9 +140,25 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       const { markScheme } = actions.getRail();
       const ctx = getContext();
       let stopWatch = () => {};
+      // Sam's questions reach the board even when the LLM never calls write_on_board (T27): the writer
+      // hears every line, writes the maths questions she did not write, and knows her last question.
+      const questions = createQuestionWriter((note) => actions.writeOnBoard(note), {
+        toLatex: async (spoken) => spokenToLatex(spoken) ?? (await remoteLatex(spoken).catch(() => null)),
+      });
       const session = await connectAnam({
         videoElementId,
-        handlers,
+        handlers: {
+          ...handlers,
+          onTranscript: (speaker, text, id) => {
+            handlers.onTranscript(speaker, text, id);
+            if (speaker === "avatar") questions.heard(id ?? text, text, true);
+            else questions.studentSaid(text);
+          },
+          onTranscriptPartial: (id, speaker, soFar) => {
+            handlers.onTranscriptPartial?.(id, speaker, soFar);
+            if (speaker === "avatar" && soFar) questions.heard(id, soFar, false);
+          },
+        },
         context: {
           topic: ctx.topic ?? markScheme?.topic,
           notesExcerpt: ctx.notesExcerpt,
@@ -169,7 +166,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         },
         onPersonaSpeech: (chars, done) => actions.speechProgress(chars, done),
         registerTools: (c) => {
-          const unregister = registerTools(c, actions);
+          const unregister = registerTools(c, actions, questions);
           return () => {
             stopWatch();
             unregister();
@@ -183,7 +180,11 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
           stopWatch();
           session.disconnect();
         },
-        sendText: session.sendText,
+        sendText: (text) => {
+          // Typed lines never come back through the transcript stream, so the writer hears them here.
+          questions.studentSaid(text);
+          session.sendText?.(text);
+        },
         notifyBoard: (state) =>
           session.addContext(
             state === "writing"

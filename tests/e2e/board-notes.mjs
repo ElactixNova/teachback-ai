@@ -8,7 +8,9 @@
 // writing appears progressively as fake speech chunks arrive and finishes when the turn ends; it lands
 // inside the visible board, clear of the ink and of other notes; one question is written at a time; a
 // note waits while the pen is down; the examiner PNG holds the finished writing even mid-animation;
-// a full board scrolls to the note; Clear leaves the notes; reduced motion shows it at once.
+// a full board moves to show the note and the room under it; Clear leaves the notes; reduced motion
+// shows it at once; a maths question Sam only SAYS (no tool call) is still written; and "write it
+// down" writes her last question, not a new one.
 // Env: BASE_URL (default http://localhost:3000), CHROMIUM_PATH, HEADED=1.
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -129,10 +131,12 @@ let placed = await notes();
 check("notes are inside the visible board", placed.every(visible), JSON.stringify(placed.map((c) => [Math.round(c.x), Math.round(c.y), Math.round(c.w), Math.round(c.h)])));
 check("notes keep 24px from every stroke", placed.every((c) => ink.every((s) => !near(c, s, 20))));
 check("notes keep 24px from each other", !near(placed[0], placed[1], 23));
+const room = (c) => ({ ...c, h: c.h * 3 });
+check("each question has free room under it to answer in (twice its height)", placed.every((c) => visible(room(c)) && ink.every((s) => !near(room(c), s, 0))));
 check("screen readers get the question in words", placed[0].label === "Sam wrote: Solve x^2 + 5x + 6 = 0" && placed[1].label === "Sam · Question 2 wrote: (1)/(x) + √(x^2+1) = 3", placed[1].label);
 
 // 3. Pen down: queued, written one quiet second after the pen lifts.
-ink.push(await draw([[420, 420], [470, 470], [520, 440]], true));
+ink.push(await draw([[500, 540], [550, 590], [600, 560]], true)); // clear of Sam's notes: their boxes take pointer events
 const queued = await write({ content: "Explain why both roots are negative", kind: "text" });
 check("queued while the pen is down", queued.status === "queued" && (await notes()).length === 2);
 await page.mouse.up();
@@ -162,11 +166,11 @@ await page.waitForTimeout(1300);
 const beyond = await write({ content: "y = mx + c", kind: "math" });
 await page.waitForTimeout(700);
 placed = await notes();
-check("full board: note placed beyond the ink and scrolled into view", beyond.status === "written" && /below/.test(beyond.where) && visible(placed[placed.length - 1]), beyond.where);
+check("full board: note placed beyond the ink; the board moves to show it and the room under it", beyond.status === "written" && /below/.test(beyond.where) && visible(room(placed[placed.length - 1])), beyond.where);
 
 // 7. A note can be removed.
 await allWritten();
-await page.locator("[data-sam-note] button").first().click();
+await page.locator("[data-sam-note] button").last().click(); // the newest note is the one in view after the board moved
 check("x removes a note", (await notes()).length === placed.length - 1);
 
 // 8. Reduced motion: no animation, the question is simply there.
@@ -179,6 +183,39 @@ await calm.page.waitForTimeout(1300);
 await calm.page.evaluate(() => window.__feynmanActions.writeOnBoard({ content: "x^2 = 49", kind: "math" }));
 const instant = await notes(calm.page);
 check("prefers-reduced-motion: written at once", instant.length === 1 && !instant[0].writing && (await samInk(calm.page)) > 100);
+
+// 9. Sam only SAYS a maths question (the LLM never calls the tool): it is written anyway, once.
+const talk = await open();
+await talk.page.route("**/api/to-latex", (route) => {
+  const { texts } = route.request().postDataJSON();
+  route.fulfill({ json: { texts: texts.map((t) => t.replace(/x squared minus nine equals zero/i, "$x^2 - 9 = 0$")) } });
+});
+const sam = (fn, ...args) => talk.page.evaluate(([f, a]) => window.__feynmanQuestions[f](...a), [fn, args]);
+const labels = async () => (await notes(talk.page)).map((n) => n.label);
+const said = "Right, got it. Can you solve x squared minus nine equals zero? Take your time.";
+await sam("heard", "m1", said.slice(0, 14), false);
+await sam("heard", "m1", said.slice(0, 40), false);
+await talk.page.waitForTimeout(400);
+check("nothing is written before the question is complete", (await labels()).length === 0);
+await sam("heard", "m1", said.slice(0, said.indexOf("?") + 1), false);
+await talk.page.waitForTimeout(600);
+await sam("heard", "m1", said, false);
+await sam("heard", "m1", said, true);
+await talk.page.waitForTimeout(600);
+check("a spoken maths question is written without any tool call, once", JSON.stringify(await labels()) === JSON.stringify(["Sam wrote: Solve x^2 - 9 = 0?"]), JSON.stringify(await labels()));
+
+// 10. "Can you write it down?" means that question, whatever the LLM then sends.
+await sam("studentSaid", "Can you write it down?");
+const invented = await sam("tool", { content: "Solve x^2 + 7x + 10 = 0", kind: "math" });
+await talk.page.waitForTimeout(600);
+check("'write it down' keeps her last question; the LLM's new one is not written", (await labels()).length === 1 && /last question/i.test(invented), invented);
+await sam("heard", "m2", "Which of the two roots is larger?", true);
+await talk.page.waitForTimeout(300);
+const before = (await labels()).length;
+await sam("studentSaid", "could you put that on the board please");
+await talk.page.waitForTimeout(4200); // the pace queue (3 s) plus the write
+const after2 = await labels();
+check("a question she only asked aloud is written when the student asks for it", before === 1 && after2.length === 2 && after2[1] === "Sam wrote: Which of the two roots is larger?", JSON.stringify(after2));
 
 await browser.close();
 const failed = results.filter((ok) => !ok).length;

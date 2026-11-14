@@ -11,8 +11,8 @@ import {
   placeNote,
   plainMath,
   revealScript,
-  shiftIntoView,
   startClock,
+  viewToShow,
   writeProgress,
   type Measure,
   type NoteInput,
@@ -22,6 +22,7 @@ import {
   type Script,
   type WriteClock,
 } from "@/lib/board/notes";
+import { mathKey } from "@/lib/board/questions";
 
 /**
  * An infinite whiteboard. Strokes are stored in WORLD coordinates; the view (pan x/y in CSS px, zoom scale)
@@ -55,6 +56,8 @@ interface SamNote extends Rect {
   label: string;
   /** What it says, in plain words, for screen readers. */
   plain: string;
+  /** Its maths, normalised: the same question is never written twice. */
+  key: string;
   script: Script;
   k: number;
   /** While the pen is still writing; null once finished. Mutated in place as Sam's speech arrives. */
@@ -340,7 +343,27 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     applyView({ scale, x: w / 2 - cx * scale, y: padTop + (h - padTop - padBottom) / 2 - cy * scale });
   }, [applyView]);
 
-  /** Puts a note in free space inside what the student can see now; scrolls to it when nothing fits. */
+  /** Glides the board (pan, and zoom out only if it must) until `rect` is fully in view. Stops if the student touches the board. */
+  const showRect = useCallback(
+    (rect: Rect) => {
+      const from = viewRef.current;
+      const { w, h } = size.current;
+      const to = viewToShow(rect, from, { w, h, top: DOCK_PX, bottom: CONTROLS_PX }, NOTE_MARGIN, MIN_SCALE);
+      if (to.x === from.x && to.y === from.y && to.scale === from.scale) return;
+      const t0 = performance.now();
+      const glide = (t: number) => {
+        if (pointers.current.size > 0) return;
+        const p = Math.min(1, (t - t0) / 350);
+        const e = p * (2 - p);
+        applyView({ x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, scale: from.scale + (to.scale - from.scale) * e });
+        if (p < 1) requestAnimationFrame(glide);
+      };
+      requestAnimationFrame(glide);
+    },
+    [applyView],
+  );
+
+  /** Puts a note where there is room to answer it, inside what the student can see if possible; otherwise moves the board to it. */
   const placeNow = useCallback(
     (input: NoteInput): NoteOutcome => {
       const v = viewRef.current;
@@ -362,12 +385,15 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         const b = s.erase ? null : inkBounds([s]);
         if (b) ink.push({ x: b.x0, y: b.y0, w: b.x1 - b.x0, h: b.y1 - b.y0 });
       }
-      const spot = placeNote(ink, notesRef.current, viewport, box, NOTE_MARGIN * k);
+      // The question needs room to be answered: at least twice its own height, free, right below it.
+      const withRoom = { w: box.w, h: box.h * 3 };
+      const spot = placeNote(ink, notesRef.current, viewport, withRoom, NOTE_MARGIN * k);
       const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       const note: SamNote = {
         id: ++noteId.current,
         label: input.label ? `Sam · ${input.label}` : "Sam",
         plain,
+        key: mathKey(input.content),
         script,
         x: spot.x,
         y: spot.y,
@@ -378,21 +404,11 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       updateNotes((ns) => [...ns, note]);
       drawSam();
       if (spot.inView) return { status: "written", where: describeSpot(note, viewport) };
-      // Nothing free on screen: glide the board so the note is visible. Stops if the student touches the board.
-      const { dx, dy } = shiftIntoView(note, viewport, NOTE_MARGIN * k);
-      const from = viewRef.current;
-      const t0 = performance.now();
-      const glide = (t: number) => {
-        if (pointers.current.size > 0) return;
-        const p = Math.min(1, (t - t0) / 350);
-        const e = p * (2 - p);
-        applyView({ scale: from.scale, x: from.x - dx * from.scale * e, y: from.y - dy * from.scale * e });
-        if (p < 1) requestAnimationFrame(glide);
-      };
-      requestAnimationFrame(glide);
-      return { status: "written", where: "below their work (the board scrolled to show it)" };
+      // No such space on screen: it went below their work, so bring it and the space under it into view.
+      showRect({ x: spot.x, y: spot.y, ...withRoom });
+      return { status: "written", where: "below their work (the board moved to show it and the space under it)" };
     },
-    [applyView, updateNotes, drawSam],
+    [showRect, updateNotes, drawSam],
   );
 
   /** Writes the next queued note once the pen is up, the board is visible and Sam's own pen is free. */
@@ -419,20 +435,30 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
 
   const addNote = useCallback(
     (input: NoteInput): NoteOutcome => {
+      const hidden = (wrapRef.current?.getBoundingClientRect().width ?? 0) < 1;
+      const busy = !!current.current || pointers.current.size > 0;
+      // The same question is never written twice: show the one that is there (never moving the board mid-stroke).
+      const key = mathKey(input.content);
+      const existing = notesRef.current.find((n) => n.key === key);
+      if (existing) {
+        if (!hidden && !busy) showRect({ x: existing.x, y: existing.y, w: existing.w, h: existing.h * 3 });
+        return { status: "already", where: "where it was written" };
+      }
+      if (pendingNotes.current.some((p) => mathKey(p.content) === key)) return { status: "queued" };
       // Never while the board is hidden (results view) or the pen is down: the note would land under
       // their hand or move the board mid-stroke.
-      if ((wrapRef.current?.getBoundingClientRect().width ?? 0) < 1) {
+      if (hidden) {
         pendingNotes.current.push(input);
         return { status: "hidden" };
       }
       // One question at a time: a second one waits for the pen to finish the first.
-      if (current.current || pointers.current.size > 0 || noteTimer.current || notesRef.current.some((n) => n.clock)) {
+      if (busy || noteTimer.current || notesRef.current.some((n) => n.clock)) {
         pendingNotes.current.push(input);
         return { status: "queued" };
       }
       return placeNow(input);
     },
-    [placeNow],
+    [placeNow, showRect],
   );
 
   useEffect(() => () => {
