@@ -28,7 +28,7 @@ function summariseReport(r: GapReport): string {
     : "none";
   return `Report is open on screen. Score ${r.score}/100. Summary: ${r.summary} Strengths: ${
     r.strengths.join(", ") || "none"
-  }. Gaps: ${gaps}. Tell the student their score and the most important gap in one or two sentences, as a curious student would, without reading this out.`;
+  }. Gaps: ${gaps}. Tell the student their score and the most important gap in one or two sentences, as a curious student would, without reading this out. Only talk about the gaps listed here; do not add corrections of your own.`;
 }
 
 /** Turn streamed message chunks into whole transcript lines, and surface cues as they arrive. */
