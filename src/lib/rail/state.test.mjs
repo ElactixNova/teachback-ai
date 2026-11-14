@@ -182,7 +182,7 @@ test("rail status: follow up a partly explained point first, then ask the next p
 
 test("an unfinished board tells the avatar to give time, and a flip fires a note", () => {
   const mk = (unfinished) => [{ ...r("c1", "partial", 1), boardObservation: "6CO2 + 6H2O ->", boardUnfinished: unfinished }, r("c2", "not_covered", 0)];
-  assert.match(railStatusText(scheme, mk(true)), /board looks UNFINISHED.*give them time/);
+  assert.match(railStatusText(scheme, mk(true)), /Board status: UNFINISHED/);
   assert.doesNotMatch(railStatusText(scheme, mk(false)), /UNFINISHED/);
   assert.ok(railChangeNote(scheme, mk(true), mk(false)), "unfinished -> finished is worth a note");
   assert.equal(railChangeNote(scheme, mk(true), mk(true)), null);

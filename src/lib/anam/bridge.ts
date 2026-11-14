@@ -161,8 +161,8 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         notifyBoard: (state) =>
           session.addContext(
             state === "writing"
-              ? "[BOARD, private, do not read out] The student is writing or drawing on the board right now. Say nothing until they speak to you."
-              : "[BOARD, private, do not read out] The student stopped writing on the board a few seconds ago. Look at the board notes: if it looks unfinished or they are thinking, keep waiting; if they have been quiet for a while, you may ask once whether they are finished.",
+              ? "[BOARD] status: the student is writing or drawing now."
+              : "[BOARD] status: the student stopped writing a few seconds ago.",
           ),
         setFocus: (criteria) => {
           if (!criteria.length) {

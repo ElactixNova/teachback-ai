@@ -1,7 +1,7 @@
 // Run: node --test src/lib/curriculum/grade.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildMarkScheme, buildReport, findQuote, gradeAll, primaryGap } from "./grade.ts";
+import { buildMarkScheme, buildReport, findQuote, gradeAll, isBackReference, primaryGap } from "./grade.ts";
 
 const scheme = buildMarkScheme(
   {
@@ -83,4 +83,12 @@ test("primary gap is an attempted criterion, never one the student did not cover
   assert.equal(primaryGap(scheme, [res("c1", "partial", 1), res("c2", "not_covered", 0)]), "c1"); // c2 lost 2 vs c1's 2: c2 was never attempted
   assert.equal(primaryGap(scheme, [res("c1", "partial", 2), res("c2", "not_covered", 0)]), "c1"); // c2 lost more, still not attempted
   assert.equal(primaryGap(scheme, [res("c1", "not_covered", 0), res("c2", "not_covered", 0)]), "c1"); // nothing attempted: biggest loss (c1: 3)
+});
+
+test("back-references are never shown as 'What you said'", () => {
+  assert.ok(isBackReference("I already did that."));
+  assert.ok(isBackReference("As I said, it needs light"));
+  assert.ok(isBackReference("I wrote that on the board"));
+  assert.equal(isBackReference("Plants take in CO2 and water and use light to make glucose."), false);
+  assert.equal(isBackReference("Chlorophyll absorbs light that is already available"), true); // 'already' alone is enough: drop rather than risk a wrong quote
 });

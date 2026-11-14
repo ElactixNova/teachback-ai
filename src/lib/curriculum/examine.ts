@@ -34,13 +34,15 @@ Rules:
 - Award a mark for an \`expected\` step only if the student stated it, or the whiteboard shows it, explicitly and correctly. Do not give credit for an implied step or a correct final answer without the reasoning.
 - If the student corrected themselves, mark their best final version, but mention the earlier error in \`fix\`.
 - status: full = all marks; partial = some; missed = they addressed the criterion but earned 0; not_covered = never addressed; in_progress = currently being explained (MODE=live only).
-- evidence.quote must be copied verbatim from TRANSCRIPT. Never invent quotes. If there is no relevant quote, omit evidence.
+- evidence.quote must be copied verbatim from a Student line in TRANSCRIPT. Never invent quotes. It must be the line where the student ACTUALLY MADE the point (the clearest, usually the earliest, statement of it), never a later line that only refers back to it ("I already did that", "as I said", "like I just said"). If the only relevant line is a back-reference, find the earlier line it refers to. If there is no line that really makes the point, omit evidence.
+- Read the WHOLE transcript before deciding a step is missing: if the student says they already covered something, search the earlier lines and the whiteboard for it and award it if it was clearly made. Never set a fix that asks the student to do something they already did.
 - boardObservation: describe only what is visibly on the whiteboard, including steps that are missing between lines. Transcribe equations and formulas exactly as written (for example "CO2 + H2O -> C6H12O6 + O2"), do not silently correct them.
 - Check the correctness of anything written, not just its presence. For a chemical equation, count the atoms of every element on each side: if they differ it is NOT balanced, so it earns no mark for a step that needs a balanced or correct equation, and \`fix\` must say which element is unbalanced. The same goes for wrong coefficients, units, signs or arithmetic. A step whose wording is only "states the equation" still needs the equation to be correct. If the handwriting is too unclear to check, say so in boardObservation and do not award the mark.
 - If the student made a claim about a criterion that contradicts or misstates it (for example saying glucose is made in the roots when the criterion is about where photosynthesis happens), that criterion was addressed: status is missed (or partial if some steps were right), never not_covered. Quote the wrong claim as evidence and say in \`fix\` what was wrong.
 - boardUnfinished: true when what is on the whiteboard looks unfinished or cut off, so the student is probably midway or thinking (an equation with no right-hand side or a trailing operator, a half-drawn diagram, a label with no arrow, a formula missing its last term); false when the board is empty or looks complete. Use the same value on every result.
 - missingSteps: copy them verbatim from \`expected\`.
 - fix: one or two sentences the student could say out loud to earn the missing marks. Don't lecture.
+- Write every mathematical expression, equation, formula or chemical formula inside boardObservation and fix as LaTeX between single dollar signs, for example $x^2 + 5x + 6 = 0$ or $6CO_2 + 6H_2O \\to C_6H_{12}O_6 + 6O_2$. Use dollar signs for nothing else. Quotes in evidence and the steps in missingSteps stay exactly as given (no dollar signs added or removed).
 - primaryGapId: the criterion with the most marks lost (ties: the earliest in the scheme).
 - studyPlan: 3 steps, the first one tied to primaryGapId.
 Return JSON only, matching the provided schema.
@@ -110,13 +112,15 @@ const SchemeSchema = z.object({
 const SCHEME_PROMPT = `You are an examiner writing a mark scheme from a student's lecture notes, for the topic they will teach back.
 The notes contain page markers like [Page 2]. Use only what the notes say.
 Rules:
+- topic: a short descriptive title of what these notes actually teach (2 to 6 words, for example "Photosynthesis" or "Solving quadratic equations"), written from the content. Never use the file name or a lecture code.
 - Write 4 to 7 criteria for the topic. Each criterion is one idea a student must explain, with a short title.
 - \`expected\` lists the 2 to 5 mark-bearing steps for that criterion. Each step is one short, checkable statement of what a student must say or show, and is worth exactly 1 mark. No step may overlap another.
 - When a step is an equation or formula, write the full correct form in the step and say "balanced" or "correct" explicitly, so it can be checked.
+- Write every mathematical expression, equation or chemical formula in a title or step as LaTeX between single dollar signs (for example $ax^2 + bx + c = 0$), nothing else in dollar signs.
 - Base every step on the notes. Do not add outside facts.
 - \`page\` is the [Page N] number where the notes teach that criterion. Never invent a page number.
 - \`label\` is a short section or lecture label from the notes (for example "Lecture 4"), or null.
-- \`probe\` is the one question a curious student would ask to draw this criterion out of the teacher. It must point at the specific steps (name the thing to produce: "Can you write the balanced symbol equation for photosynthesis?", "Where exactly does the light reaction happen, and what goes in and out?") but must NEVER contain the answer or any expected step's content. Spoken style, ONE question about ONE thing, at most 18 words, no lists of sub-questions. Do not hint at common mistakes or wrong answers (never "why can not X do it?").
+- \`probe\` is the one question a curious student would ask to draw this criterion out of the teacher. It must point at the specific steps (name the thing to produce: "Can you write the balanced symbol equation for photosynthesis?", "Where exactly does the light reaction happen, and what goes in and out?") but must NEVER contain the answer or any expected step's content. Spoken style, ONE question about ONE thing, at most 18 words, no lists of sub-questions, in plain words only: no symbols, no dollar signs, no LaTeX (it is read aloud by a voice, so write 'x squared', never 'x^2'). Do not hint at common mistakes or wrong answers (never "why can not X do it?").
 - \`ask\` is "write" when the best evidence is something written (an equation, formula, definition to copy, calculation), "draw" when it is a diagram or process (stages, cycle, apparatus), otherwise "say". Use "write" or "draw" for roughly a third of the criteria, never all.
 - Order criteria in the order a good explanation would present them.
 Return JSON only, matching the schema.`;
