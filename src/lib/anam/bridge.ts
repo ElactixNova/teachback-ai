@@ -133,8 +133,14 @@ export function createAnamAvatarBridge(getContext: () => PersonaContext = () => 
       let cleanupTools = () => {};
       const typed = new Set<string>();
 
+      // Anam keys allow few concurrent sessions: end ours when the tab closes or reloads,
+      // otherwise the next "Start session" hits "Concurrency limit reached" until it times out.
+      const onPageHide = () => void client?.stopStreaming().catch(() => {});
+      window.addEventListener("pagehide", onPageHide);
+
       const disconnect = () => {
         closedByUs = true;
+        window.removeEventListener("pagehide", onPageHide);
         cleanupTools();
         void client?.stopStreaming().catch(() => {});
         client = null;
@@ -171,6 +177,7 @@ export function createAnamAvatarBridge(getContext: () => PersonaContext = () => 
         await c.streamToVideoElement(videoElementId);
         if (!closedByUs) handlers.onStatus("live");
       } catch (e) {
+        window.removeEventListener("pagehide", onPageHide);
         cleanupTools();
         void client?.stopStreaming().catch(() => {});
         client = null;
