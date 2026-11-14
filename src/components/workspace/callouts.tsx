@@ -1,6 +1,8 @@
 // T14: "write it / draw it" chips and the "What you missed" callout, shared by the rail, gap notes and end screen.
 import { PenLine, Shapes } from "lucide-react";
 import type { AskMode, Criterion, CriterionResult } from "@/types/session";
+import { MathText, SpokenMath } from "./MathText";
+import { plainMath } from "./math";
 
 const ASK: Record<Exclude<AskMode, "say">, { label: string; Icon: typeof PenLine }> = {
   write: { label: "Write it", Icon: PenLine },
@@ -30,19 +32,19 @@ export function MissedCallout({ criterion, result, className = "" }: { criterion
   if (missing.length === 0) return null;
   const wrong = result.status === "missed" && result.evidence?.quote;
   return (
-    <aside aria-label={`What you missed: ${criterion.title}`} className={`rounded-xl border border-missed/30 bg-missed-soft p-3 text-sm ${className}`}>
+    <aside aria-label={`What you missed: ${plainMath(criterion.title)}`} className={`rounded-xl border border-missed/30 bg-missed-soft p-3 text-sm ${className}`}>
       <p className="text-[11px] font-semibold uppercase tracking-wider text-missed">What you missed</p>
       <ul className="mt-1.5 space-y-1 leading-snug">
         {missing.map((s) => (
           <li key={s} className="flex gap-2">
             <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-missed" aria-hidden />
-            <span className="font-semibold text-ink">{s}</span>
+            <MathText text={s} className="font-semibold text-ink" />
           </li>
         ))}
       </ul>
       {wrong && (
         <p className="mt-2 text-xs text-muted">
-          You said: <s className="decoration-missed decoration-2">{result.evidence!.quote}</s>
+          You said: <s className="decoration-missed decoration-2"><SpokenMath text={result.evidence!.quote} /></s>
         </p>
       )}
     </aside>

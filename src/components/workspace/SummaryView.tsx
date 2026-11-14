@@ -8,6 +8,8 @@ import { MarksPill, STATUS_LABEL, SourceChip, StatusIcon, displayStatus } from "
 import type { Async, VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
 import { MissedCallout } from "./callouts";
+import { MathText } from "./MathText";
+import { plainMath } from "./math";
 
 /** At most this many fal images on the end screen (one per gap, worst first). */
 export const MAX_LEARN_IMAGES = 4;
@@ -26,9 +28,9 @@ interface Props {
 function Diagram({ note, visual, title, onRetry }: { note: RevisionNote; visual?: VisualState; title: string; onRetry: () => void }) {
   if (note.diagram.kind === "svg" && note.diagram.svg) {
     // Inline SVG rendered as an image on purpose (no DOM injection).
-    return <ZoomableImage src={svgDataUri(note.diagram.svg)} alt={`Diagram: ${title}`} className="w-full rounded-xl border border-line bg-white object-contain" />;
+    return <ZoomableImage src={svgDataUri(note.diagram.svg)} alt={`Diagram: ${plainMath(title)}`} className="w-full rounded-xl border border-line bg-white object-contain" />;
   }
-  return <VisualSlot state={visual} alt={`Diagram: ${title}`} onRetry={onRetry} compact />;
+  return <VisualSlot state={visual} alt={`Diagram: ${plainMath(title)}`} onRetry={onRetry} compact />;
 }
 
 export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRetryVisual, onTeachBack, onBack }: Props) {
@@ -94,13 +96,13 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                 <div className="min-w-0">
                   <header className="flex items-start gap-3">
                     <StatusIcon status={displayStatus(r)} className="mt-0.5" />
-                    <h3 className="min-w-0 flex-1 font-semibold leading-snug">{c.title}</h3>
+                    <h3 className="min-w-0 flex-1 font-semibold leading-snug"><MathText text={c.title} /></h3>
                     <MarksPill result={r} criterion={c} />
                   </header>
-                  <p className="mt-2 text-sm font-semibold text-accent">{note.oneLiner}</p>
+                  <p className="mt-2 text-sm font-semibold text-accent"><MathText text={note.oneLiner} /></p>
                   <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-relaxed marker:font-semibold marker:text-faint">
                     {note.steps.map((s, i) => (
-                      <li key={i}>{s}</li>
+                      <li key={i}><MathText text={s} /></li>
                     ))}
                   </ol>
                   <div className="mt-3">
@@ -126,7 +128,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                   <article key={g.criterion.id} className="flex flex-col overflow-hidden rounded-2xl border border-line">
                     {svgFallback ? (
                       <div className="relative">
-                        <ZoomableImage src={svgDataUri(note.diagram.svg!)} alt={`Diagram: ${g.criterion.title}`} className="aspect-[4/3] w-full bg-white object-contain" />
+                        <ZoomableImage src={svgDataUri(note.diagram.svg!)} alt={`Diagram: ${plainMath(g.criterion.title)}`} className="aspect-[4/3] w-full bg-white object-contain" />
                         {v?.status === "loading" && (
                           <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-semibold text-muted">
                             <LoaderCircle className="h-3 w-3 animate-spin" /> Generating…
@@ -135,12 +137,12 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                       </div>
                     ) : (
                       <div className="p-2 pb-0">
-                        <VisualSlot state={v} alt={`Illustration: ${g.criterion.title}`} onRetry={() => onRetryVisual(g.criterion.id)} compact />
+                        <VisualSlot state={v} alt={`Illustration: ${plainMath(g.criterion.title)}`} onRetry={() => onRetryVisual(g.criterion.id)} compact />
                       </div>
                     )}
                     <div className="flex flex-1 items-center gap-3 p-3">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{g.criterion.title}</p>
+                        <p className="truncate text-sm font-semibold"><MathText text={g.criterion.title} /></p>
                         <p className="text-xs font-semibold text-muted">
                           {STATUS_LABEL[s]} · {g.criterion.marks - g.result.awarded} marks at stake
                         </p>
