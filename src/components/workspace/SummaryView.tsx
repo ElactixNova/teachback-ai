@@ -5,7 +5,7 @@ import type { GapReport, MarkScheme, RevisionNote } from "@/types/session";
 import { svgDataUri } from "./api";
 import { gapsOf, VisualSlot, type Gap } from "./GapNotesPanel";
 import { MarksPill, STATUS_LABEL, SourceChip, StatusIcon, displayStatus } from "./status";
-import type { RevisionNotesState, VisualState } from "./types";
+import type { Async, VisualState } from "./types";
 
 /** At most this many fal images on the end screen (one per gap, worst first). */
 export const MAX_LEARN_IMAGES = 4;
@@ -13,9 +13,9 @@ export const MAX_LEARN_IMAGES = 4;
 interface Props {
   scheme: MarkScheme;
   report: GapReport;
-  notes: RevisionNotesState;
+  notes: Async<RevisionNote[]>;
   visuals: Record<string, VisualState>;
-  onRetryNotes: () => void;
+  onRetryNotes?: () => void;
   onRetryVisual: (criterionId: string) => void;
   onTeachBack: (criterionIds: string[]) => void;
   onBack: () => void;
@@ -36,7 +36,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
   const status = (id: string) => displayStatus(report.results.find((r) => r.criterionId === id));
   const count = (s: string) => scheme.criteria.filter((c) => status(c.id) === s).length;
   const pct = report.total ? Math.round((report.awarded / report.total) * 100) : 0;
-  const notesById = new Map(notes.status === "ready" ? notes.value.map((n) => [n.criterionId, n]) : []);
+  const notesById = new Map(notes.status === "ready" ? notes.data.map((n) => [n.criterionId, n]) : []);
   const ordered = notes.status === "ready" ? gaps.filter((g) => notesById.has(g.criterion.id)) : [];
   const learn = gaps.slice(0, MAX_LEARN_IMAGES);
 
@@ -82,9 +82,9 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
             <div className="rounded-2xl border border-missed/30 bg-missed-soft p-4 text-sm" role="alert">
               <p className="font-bold text-missed">Couldn’t write the revision notes</p>
               <p>{notes.error}</p>
-              <button type="button" onClick={onRetryNotes} className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-xl border border-line bg-card px-3 text-xs font-bold">
+              {onRetryNotes && <button type="button" onClick={onRetryNotes} className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-xl border border-line bg-card px-3 text-xs font-bold">
                 <RefreshCw className="h-3.5 w-3.5" /> Try again
-              </button>
+              </button>}
             </div>
           )}
           {ordered.map(({ criterion: c, result: r }) => {

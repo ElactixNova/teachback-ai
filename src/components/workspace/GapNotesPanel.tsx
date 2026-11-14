@@ -44,7 +44,7 @@ export function gapsOf(scheme: MarkScheme, report: GapReport): Gap[] {
 
 export function VisualSlot({ state, alt, onRetry, compact }: { state: VisualState | undefined; alt: string; onRetry: () => void; compact?: boolean }) {
   const box = `flex ${compact ? "aspect-[4/3]" : "aspect-video"} w-full flex-col items-center justify-center gap-2 rounded-xl border border-line bg-canvas p-4 text-center text-xs text-muted`;
-  if (!state || state.status === "loading") {
+  if (!state || state.status === "loading" || state.status === "idle") {
     return (
       <div className={box} aria-busy>
         <LoaderCircle className="h-5 w-5 animate-spin text-accent" />
@@ -63,7 +63,7 @@ export function VisualSlot({ state, alt, onRetry, compact }: { state: VisualStat
       </div>
     );
   }
-  const v = state.visual;
+  const v = state.data;
   return v.kind === "video" ? (
     <video src={v.url} controls autoPlay muted loop playsInline className="w-full rounded-xl border border-line bg-black" />
   ) : (

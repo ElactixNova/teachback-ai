@@ -4,14 +4,14 @@ import { useState } from "react";
 import { LoaderCircle, Pencil, RefreshCw, Trash2, Plus } from "lucide-react";
 import type { CriterionResult, CurriculumContext, MarkScheme } from "@/types/session";
 import { CurriculumUploader } from "./CurriculumUploader";
-import { MAX_ATTEMPTS } from "./rail-temp";
+import { MAX_ATTEMPTS } from "@/lib/rail/state";
 import { STATUS_LABEL, SourceChip, StatusIcon, displayStatus } from "./status";
-import type { AsyncState } from "./types";
+import type { Async } from "./types";
 
 interface Props {
   curriculum: CurriculumContext | null;
   onCurriculumChange: (c: CurriculumContext | null, fileName?: string) => void;
-  scheme: AsyncState<MarkScheme>;
+  scheme: Async<MarkScheme>;
   results: CriterionResult[];
   /** Criterion being explained right now (from live marking), if any. */
   liveId: string | null;
@@ -24,7 +24,7 @@ interface Props {
 
 export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results, liveId, analysing, onRebuild, onEdit, final }: Props) {
   const [editing, setEditing] = useState<MarkScheme | null>(null);
-  const ready = scheme.status === "ready" ? scheme.value : null;
+  const ready = scheme.status === "ready" ? scheme.data : null;
   const byId = new Map(results.map((r) => [r.criterionId, r]));
   const awarded = results.reduce((n, r) => n + r.awarded, 0);
   const total = ready?.totalMarks ?? 0;
