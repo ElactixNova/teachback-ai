@@ -1,4 +1,4 @@
-# Project: TeachBack AI (Imperial AI Hackathon — Track 02: Voice, Vision & Generative Media)
+# Project: Feynman AI (Imperial AI Hackathon — Track 02: Voice, Vision & Generative Media)
 
 ## Core Concept
 A Feynman-technique "Reverse AI Tutor" web app. Instead of the AI lecturing the user, the user:

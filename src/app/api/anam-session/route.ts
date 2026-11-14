@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        clientLabel: "teachback",
+        clientLabel: "feynman-ai",
         expiresInSeconds: 900,
         personaConfig: buildPersonaConfig(ctx),
       }),

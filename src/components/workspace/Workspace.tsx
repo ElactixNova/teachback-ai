@@ -180,7 +180,7 @@ export function Workspace() {
             <GraduationCap className="h-4.5 w-4.5" />
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-bold tracking-tight">TeachBack</p>
+            <p className="text-sm font-bold tracking-tight">Feynman AI</p>
             <p className="hidden text-[11px] text-stone-500 sm:block">Learn it by teaching it</p>
           </div>
         </div>

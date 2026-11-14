@@ -1,2 +1,2 @@
-# teachback-ai
-TeachBack AI: Feynman reverse tutor (Imperial AI Hackathon, Track 02)
+# Feynman AI
+Feynman AI: Feynman reverse tutor (Imperial AI Hackathon, Track 02)

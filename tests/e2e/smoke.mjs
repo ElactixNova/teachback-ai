@@ -1,4 +1,4 @@
-// TeachBack end-to-end smoke test (T6). Drives the real app in headless Chromium.
+// Feynman AI end-to-end smoke test (T6). Drives the real app in headless Chromium.
 //
 //   npm run dev                      # in the repo root, with ANAM_API_KEY, FAL_KEY, ANTHROPIC_API_KEY in .env
 //   cd tests/e2e && npm install && npm run smoke
