@@ -1,25 +1,28 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import type { GapReport } from "@/types/session";
+import { analyzeExplanation } from "@/lib/curriculum/analyze";
+import type { AnalyzeRequest, ApiError, GapReport } from "@/types/session";
 
-// T3 (PDF/vision): replace this stub. Body is AnalyzeRequest { transcript, curriculumText, whiteboard? }.
-// Call a multimodal model server-side and return strict JSON matching GapReport.
-export async function POST() {
-  const body: GapReport = {
-    strengths: ["Stub strength"],
-    gaps: [
-      {
-        id: "gap-1",
-        concept: "Stub concept",
-        misconception: "Stub misconception",
-        correction: "Stub correction from the notes",
-        severity: "major",
-      },
-    ],
-    studyPlan: [
-      { id: "step-1", title: "Stub step", detail: "Review the stub concept", estimatedMinutes: 10, gapId: "gap-1" },
-    ],
-    score: 50,
-    summary: "Stub report. Replace with a real analysis.",
-  };
-  return NextResponse.json(body);
+const fail = (status: number, error: string) => NextResponse.json<ApiError>({ error }, { status });
+
+/** AnalyzeRequest { transcript, curriculumText, whiteboard? } -> GapReport. */
+export async function POST(req: Request) {
+  const body = (await req.json().catch(() => null)) as Partial<AnalyzeRequest> | null;
+  const transcript = typeof body?.transcript === "string" ? body.transcript.trim() : "";
+  const curriculumText = typeof body?.curriculumText === "string" ? body.curriculumText.trim() : "";
+  const whiteboard = typeof body?.whiteboard?.pngBase64 === "string" && body.whiteboard.pngBase64 ? body.whiteboard : undefined;
+
+  if (!curriculumText) return fail(400, "Upload your lecture notes first.");
+  if (!transcript && !whiteboard) return fail(400, "Explain or draw something first.");
+  if (!process.env.ANTHROPIC_API_KEY) return fail(500, "ANTHROPIC_API_KEY is not set on the server.");
+
+  try {
+    return NextResponse.json<GapReport>(await analyzeExplanation({ transcript, curriculumText, whiteboard }));
+  } catch (err) {
+    console.error("analyze failed", err);
+    if (err instanceof Anthropic.AuthenticationError) return fail(500, "The server's ANTHROPIC_API_KEY was rejected.");
+    if (err instanceof Anthropic.RateLimitError) return fail(429, "The analysis model is rate limited. Try again in a moment.");
+    if (err instanceof Anthropic.APIError) return fail(502, `The analysis model returned an error (${err.status ?? "network"}).`);
+    return fail(502, err instanceof Error ? err.message : "Analysis failed.");
+  }
 }
