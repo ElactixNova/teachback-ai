@@ -189,7 +189,7 @@ export function boardNote(scheme: MarkScheme, results: CriterionResult[]): strin
     .join(" | ");
   if (!seen) return "";
   const unfinished = results.some((r) => r.boardUnfinished)
-    ? " Their board looks UNFINISHED: they are probably midway or thinking, so give them time and do not ask about it yet."
+    ? " Board status: UNFINISHED (cut off or midway, so they are probably still working it out)."
     : "";
   return `On their whiteboard (you can see it through the examiner, so never ask them to say aloud what is already written or drawn there): ${seen.slice(0, MAX_BOARD_CHARS)}.${unfinished}`;
 }

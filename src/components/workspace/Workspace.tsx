@@ -150,7 +150,8 @@ export function Workspace() {
     }
     if (fileName) {
       setSourceFile(fileName);
-      void buildScheme(cur, fileName, cur.topic ?? cur.title);
+      // No topic here: the examiner names it from the notes. The PDF title is a file name, not a topic.
+      void buildScheme(cur, fileName, cur.topic ?? "");
     }
   };
 

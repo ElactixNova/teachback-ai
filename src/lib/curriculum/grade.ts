@@ -41,6 +41,15 @@ export function findQuote(quote: string, transcript: TimedLine[]): { quote: stri
   return null;
 }
 
+/**
+ * A quote that only points back at something ("I already did that", "as I said") says nothing about the point, so it is
+ * never shown as "What you said": no quote is better than a wrong one.
+ */
+export function isBackReference(quote: string): boolean {
+  const q = quote.trim();
+  return q.length < 90 && /\b(already|as i (said|mentioned|wrote|did)|like i (said|just said)|i (did|said|wrote|covered|mentioned) (that|it|this)|i just (said|did|wrote)|told you)\b/i.test(q);
+}
+
 function grade(c: Criterion, raw: RawResult | undefined, transcript: TimedLine[], mode: AnalyzeMode): CriterionResult {
   const base = { criterionId: c.id, attempts: 0, parked: false };
   if (!raw) return { ...base, status: "not_covered", awarded: 0, missingSteps: [...c.expected] };
@@ -73,7 +82,7 @@ function grade(c: Criterion, raw: RawResult | undefined, transcript: TimedLine[]
     }
   }
 
-  const evidence = raw.evidence ? findQuote(raw.evidence.quote, transcript) : null;
+  const evidence = raw.evidence && !isBackReference(raw.evidence.quote) ? findQuote(raw.evidence.quote, transcript) : null;
   return {
     ...base,
     status,

@@ -23,6 +23,7 @@ const NoteSchema = z.object({
 const PROMPT = `You write short revision notes for a student who just taught a topic back and lost marks.
 You get the lecture notes (with [Page N] markers), the mark scheme, and the marking results.
 For each listed criterion write:
+- Write every mathematical expression, equation or chemical formula in steps and oneLiner as LaTeX between single dollar signs (for example $x = 2$), and nothing else in dollar signs. Inside an SVG use plain text with unicode (x², ½, √, →), never LaTeX.
 - steps: 3 to 6 short numbered-style steps (plain sentences, no numbering) that correct what was missed. Base every step on the lecture notes only; do not add outside facts.
 - oneLiner: one sentence summarising the idea.
 - diagram: prefer an inline SVG for maths, equations, flows and labelled diagrams (diagramKind "svg"): a self-contained <svg> with a viewBox of 0 0 600 340, white background rect, sharp text of at least 16px, labelled arrows, a few colours, no scripts, no external images or fonts, under 6000 characters. If an SVG does not fit the concept (for example a physical scene), use diagramKind "image" with a concise imagePrompt for an image model, and set svg to null. When diagramKind is "svg", set imagePrompt to null.
