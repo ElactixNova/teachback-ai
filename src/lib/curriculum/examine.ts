@@ -27,7 +27,7 @@ const FinalSchema = LiveSchema.extend({
   ),
 });
 
-const EXAMINER_PROMPT = `You are a strict but fair examiner marking a student's spoken explanation against a mark scheme.
+const EXAMINER_PROMPT = `You are a fair, encouraging examiner (think GCSE/A-level mark scheme with benefit of the doubt) marking a student's spoken explanation against a mark scheme.
 Inputs: MARK_SCHEME (JSON), TRANSCRIPT (timestamped), WHITEBOARD (image), MODE.
 Rules:
 - Award a mark for an \`expected\` step only if the student stated it, or the whiteboard shows it, explicitly and correctly. Do not give credit for an implied step or a correct final answer without the reasoning.
@@ -47,8 +47,11 @@ Additional details:
 - Return exactly one result per criterion, using the criterion's id as criterionId, in mark-scheme order.
 - \`awarded\` is the number of expected steps earned (each step is one mark). Use null for evidence, boardObservation and fix when they do not apply.
 - Only the student's lines (marked "Student:") can earn marks. Avatar lines are context only.
+- Marking standard: award the mark when the student's meaning is clearly right, even if the wording is informal, incomplete or uses different vocabulary ("sugar" for glucose, "gets energy from the sun" for absorbing light energy). Do not demand the exact phrasing of the mark scheme. Give the benefit of the doubt on a near-miss that shows the right idea; only withhold a mark when the idea is absent, wrong, or contradicts the scheme. Exceptions that stay strict: an equation must really be balanced and a number, unit or formula must really be correct.
+- A step counts when it is said OR written/drawn on the board; a spoken equation counts if the student gives the formulas and the coefficients aloud.
 - Be fair: a step is earned when the student's words or drawing clearly make that point, even if phrased differently from the mark scheme. Mark each step separately, so a criterion the student partly explained earns the marks for the steps they did make; do not award 0 to a criterion where some steps were clearly stated.
-- In MODE=live, use "in_progress" for at most ONE criterion: the one the student is explaining in their most recent lines. Mark criteria they have already moved past as full, partial or missed, and give "in_progress" its marks earned so far. Criteria not yet discussed are "not_covered".
+- In MODE=live, be generous: do not use "missed" for a criterion the student has only just started or may still return to; use "in_progress" or "not_covered" and keep any marks earned. Only MODE=final may conclude that a criterion was missed.
+- In MODE=live, use "in_progress" for at most ONE criterion: the one the student is explaining in their most recent lines. Mark criteria they have already moved past as full or partial (missed only if they clearly gave a wrong answer), and give "in_progress" its marks earned so far. Criteria not yet discussed are "not_covered".
 - In the studyPlan, set criterionId to the criterion each step addresses (null for a general step). In MODE=live return an empty studyPlan.`;
 
 function formatTranscript(lines: TimedLine[]): string {
@@ -96,6 +99,8 @@ const SchemeSchema = z.object({
       expected: z.array(z.string()),
       page: z.number(),
       label: z.string().nullable(),
+      probe: z.string(),
+      ask: z.enum(["say", "write", "draw"]),
     }),
   ),
 });
@@ -109,6 +114,8 @@ Rules:
 - Base every step on the notes. Do not add outside facts.
 - \`page\` is the [Page N] number where the notes teach that criterion. Never invent a page number.
 - \`label\` is a short section or lecture label from the notes (for example "Lecture 4"), or null.
+- \`probe\` is the one question a curious student would ask to draw this criterion out of the teacher. It must point at the specific steps (name the thing to produce: "Can you write the balanced symbol equation for photosynthesis?", "Where exactly does the light reaction happen, and what goes in and out?") but must NEVER contain the answer or any expected step's content. Spoken style, ONE question about ONE thing, at most 18 words, no lists of sub-questions. Do not hint at common mistakes or wrong answers (never "why can not X do it?").
+- \`ask\` is "write" when the best evidence is something written (an equation, formula, definition to copy, calculation), "draw" when it is a diagram or process (stages, cycle, apparatus), otherwise "say". Use "write" or "draw" for roughly a third of the criteria, never all.
 - Order criteria in the order a good explanation would present them.
 Return JSON only, matching the schema.`;
 
