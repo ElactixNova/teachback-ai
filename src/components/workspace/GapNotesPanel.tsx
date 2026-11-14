@@ -140,7 +140,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
       {primary && (
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(200px,38%)] lg:items-start">
           <VisualSlot state={visual} alt={`Diagram: ${plainMath(c.title)}`} onRetry={onRetryVisual} />
-          <MissedCallout criterion={c} result={r} />
+          <MissedCallout criterion={c} result={r} showSaid={false} />
         </div>
       )}
     </article>

@@ -5,6 +5,7 @@
 import "katex/dist/katex.min.css";
 import katex from "katex";
 import { Fragment, memo, useEffect, useMemo, useSyncExternalStore } from "react";
+import { spokenToLatex } from "@/lib/math/spoken";
 import { hasMath, looksMathy, parseMath } from "./math";
 
 // trust:false blocks \href, \url, \includegraphics and friends; strict:"ignore" accepts loose LaTeX quietly.
@@ -120,19 +121,36 @@ const subscribe = (cb: () => void) => {
   return () => listeners.delete(cb);
 };
 
+/** T28: the instant local converter (Ali, T29), when it has a confident answer with real maths in it. */
+function instantLatex(text: string): string | null {
+  try {
+    const l = spokenToLatex(text);
+    return l && l !== text && hasMath(l) ? l : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * A spoken line (transcript, quote) shown with its maths typeset once /api/to-latex answers. Shows the raw text
- * until then and keeps it as the screen-reader text. Never blocks; never sends the same text twice.
+ * A spoken line (transcript, quote) shown with its maths typeset. The local converter answers at once; for what it
+ * cannot handle, /api/to-latex is asked once per distinct text and the raw text shows until it answers. The raw
+ * text stays the screen-reader text. Never blocks.
+ *
+ * `streaming`: the line is still being spoken (it changes on every chunk), so only the local converter is used:
+ * sending every partial to the API would flood it.
  */
-export function SpokenMath({ text, className }: { text: string; className?: string }) {
+export function SpokenMath({ text, className, streaming = false }: { text: string; className?: string; streaming?: boolean }) {
   const mathy = useMemo(() => looksMathy(text), [text]);
+  const instant = useMemo(() => (mathy ? instantLatex(text) : null), [mathy, text]);
+  const remote = mathy && !instant && !streaming;
   useEffect(() => {
-    if (mathy) requestLatex(text);
-  }, [mathy, text]);
-  const latex = useSyncExternalStore(
+    if (remote) requestLatex(text);
+  }, [remote, text]);
+  const fetched = useSyncExternalStore(
     subscribe,
-    () => (mathy ? (latexCache.get(text) ?? null) : null),
+    () => (remote ? (latexCache.get(text) ?? null) : null),
     () => null,
   );
+  const latex = instant ?? fetched;
   return <MathText text={latex ?? text} spoken={latex ? text : undefined} className={className} />;
 }
