@@ -225,7 +225,7 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
         )}
 
         {!report && !checking && check.status !== "error" && (
-          <p className="text-sm text-muted">Explain the topic, then press Snap &amp; Check to see your marks point by point.</p>
+          <p className="text-sm text-muted">Explain the topic, then press Check my progress to see your marks point by point.</p>
         )}
 
         {report &&

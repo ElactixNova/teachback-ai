@@ -65,6 +65,8 @@ export function Workspace() {
   useEffect(() => () => {
     if (writingTimer.current) clearTimeout(writingTimer.current);
   }, []);
+  // Declared before the effects that use it (the React compiler lint rejects a ref used before its declaration).
+  const sessionRef = useRef<AvatarSession | null>(null);
   // Tell the avatar (private context) when the student starts and stops writing; never on first render.
   const wroteBefore = useRef(false);
   useEffect(() => {
@@ -77,7 +79,6 @@ export function Workspace() {
   const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>("idle");
   const [avatarDetail, setAvatarDetail] = useState<string | undefined>();
   const [cue, setCue] = useState<Cue | null>(null);
-  const sessionRef = useRef<AvatarSession | null>(null);
   const cueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [view, setView] = useState<WorkspaceView>("board");
@@ -449,7 +450,7 @@ export function Workspace() {
             className="action inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-card px-4 text-sm font-semibold text-ink transition hover:bg-accent-soft disabled:opacity-40"
           >
             {checking ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Flag className="h-4 w-4" />}
-            <span className="hidden sm:inline">Finish &amp; get report</span>
+            <span className="hidden sm:inline">Finish &amp; final report</span>
             <span className="sm:hidden">Finish</span>
           </button>
         </div>
