@@ -5,7 +5,8 @@
   "description": "Headless end-to-end smoke test for TeachBack (kept out of the app's package.json).",
   "scripts": {
     "fixtures": "node ../../fixtures/render-fixtures.mjs",
-    "smoke": "node smoke.mjs"
+    "smoke": "node smoke.mjs",
+    "board-notes": "node board-notes.mjs"
   },
   "dependencies": {
     "playwright-core": "1.65.1"
