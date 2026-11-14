@@ -1,5 +1,5 @@
 // UI-local types for the workspace (T1). Not part of the shared contract in src/types/session.ts.
-import type { Cue, GapReport, KnowledgeGap, VisualExplainer, WhiteboardSnapshot } from "@/types/session";
+import type { Cue, LegacyGapReport, LegacyKnowledgeGap, VisualExplainer, WhiteboardSnapshot } from "@/types/session";
 
 /** DOM id of the <video> element the Anam SDK streams into (T2 calls streamToVideoElement with it). */
 export const ANAM_VIDEO_ID = "anam-video";
@@ -25,13 +25,13 @@ export interface WorkspaceActions {
   /** Snapshot of the whiteboard, or null when it is empty. */
   captureWhiteboard: () => WhiteboardSnapshot | null;
   /** Run Snap & Check: analyse transcript + whiteboard against the notes, open the drawer. */
-  checkExplanation: () => Promise<GapReport | null>;
+  checkExplanation: () => Promise<LegacyGapReport | null>;
   /** Open the report drawer (no new analysis). */
   openGapReport: () => void;
   /** Generate a fal visual for a gap (default: the most severe gap of the latest report). */
   generateVisualExplainer: (gapId?: string) => Promise<VisualExplainer | null>;
   /** The report currently shown (from Snap & Check or the avatar), or null. Read this; don't cache it. */
-  getReport: () => GapReport | null;
+  getReport: () => LegacyGapReport | null;
 }
 
 /** A live avatar session returned by AvatarBridge.connect. */
@@ -71,4 +71,4 @@ export type VisualState =
 
 export type CheckStatus = "idle" | "checking" | "error";
 
-export const SEVERITY_RANK: Record<KnowledgeGap["severity"], number> = { critical: 3, major: 2, minor: 1 };
+export const SEVERITY_RANK: Record<LegacyKnowledgeGap["severity"], number> = { critical: 3, major: 2, minor: 1 };

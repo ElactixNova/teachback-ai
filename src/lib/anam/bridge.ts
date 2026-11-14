@@ -3,7 +3,7 @@
 // <video>, register the 3 client tools against WorkspaceActions, forward transcript and
 // Director Notes cues through AvatarHandlers.
 import type { AnamClient, MessageStreamEvent } from "@anam-ai/js-sdk";
-import type { AnamSessionResponse, ApiError, GapReport } from "@/types/session";
+import type { AnamSessionResponse, ApiError, LegacyGapReport } from "@/types/session";
 import type { AvatarBridge, AvatarHandlers, AvatarSession, Speaker, WorkspaceActions } from "@/components/workspace/types";
 import type { PersonaContext } from "./persona";
 import { extractCues, toUiCue } from "./cues";
@@ -22,7 +22,7 @@ async function fetchSessionToken(ctx: PersonaContext): Promise<string> {
   return body.sessionToken;
 }
 
-function summariseReport(r: GapReport): string {
+function summariseReport(r: LegacyGapReport): string {
   const gaps = r.gaps.length
     ? r.gaps.map((g) => `${g.concept} (${g.severity}): they said "${g.misconception}"; the notes say "${g.correction}"`).join("; ")
     : "none";
@@ -64,9 +64,9 @@ const RECENT_CHECK_MS = 20_000;
 function registerTools(client: AnamClient, actions: WorkspaceActions) {
   // The LLM sometimes calls the check twice in a row ("I'm finished" ... "check my explanation").
   // Share one in-flight check and reuse a fresh result, so we never pay for two analyses + visuals.
-  let inflight: Promise<GapReport | null> | null = null;
+  let inflight: Promise<LegacyGapReport | null> | null = null;
   let lastCheckAt = 0;
-  const check = (): Promise<GapReport | null> => {
+  const check = (): Promise<LegacyGapReport | null> => {
     const fresh = actions.getReport();
     if (fresh && Date.now() - lastCheckAt < RECENT_CHECK_MS) {
       actions.openGapReport();

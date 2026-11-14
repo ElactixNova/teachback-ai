@@ -13,10 +13,10 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import type { GapReport, KnowledgeGap } from "@/types/session";
+import type { LegacyGapReport, LegacyKnowledgeGap } from "@/types/session";
 import type { CheckStatus, VisualState } from "./types";
 
-const SEVERITY: Record<KnowledgeGap["severity"], { label: string; className: string }> = {
+const SEVERITY: Record<LegacyKnowledgeGap["severity"], { label: string; className: string }> = {
   critical: { label: "Critical", className: "bg-red-100 text-red-700 ring-red-200" },
   major: { label: "Major", className: "bg-amber-100 text-amber-800 ring-amber-200" },
   minor: { label: "Minor", className: "bg-stone-100 text-stone-600 ring-stone-200" },
@@ -97,7 +97,7 @@ function VisualPlayer({ state, onRetry }: { state: VisualState | undefined; onRe
 interface Props {
   open: boolean;
   onClose: () => void;
-  report: GapReport | null;
+  report: LegacyGapReport | null;
   checkStatus: CheckStatus;
   checkError: string | null;
   visuals: Record<string, VisualState>;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GraduationCap, PanelRightOpen } from "lucide-react";
-import type { Cue, CurriculumContext, GapReport, VisualExplainer } from "@/types/session";
+import type { Cue, CurriculumContext, LegacyGapReport, VisualExplainer } from "@/types/session";
 import { AvatarPanel } from "./AvatarPanel";
 import { CurriculumUploader } from "./CurriculumUploader";
 import { ReportDrawer } from "./ReportDrawer";
@@ -47,7 +47,7 @@ export function Workspace() {
   const sessionRef = useRef<AvatarSession | null>(null);
   const cueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [report, setReport] = useState<GapReport | null>(null);
+  const [report, setReport] = useState<LegacyGapReport | null>(null);
   const [checkStatus, setCheckStatus] = useState<CheckStatus>("idle");
   const [checkError, setCheckError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -83,7 +83,7 @@ export function Workspace() {
     }
   }, []);
 
-  const checkExplanation = useCallback(async (): Promise<GapReport | null> => {
+  const checkExplanation = useCallback(async (): Promise<LegacyGapReport | null> => {
     const { curriculum: cur, transcript: lines } = latest.current;
     const whiteboard = boardRef.current?.exportSnapshot() ?? undefined;
     const text = lines.map((l) => `${l.speaker === "student" ? "Student" : "AI student"}: ${l.text}`).join("\n");

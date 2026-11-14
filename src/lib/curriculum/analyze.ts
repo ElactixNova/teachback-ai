@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AnalyzeRequest, GapReport } from "@/types/session";
+import type { LegacyAnalyzeRequest, LegacyGapReport } from "@/types/session";
 import { normalizeReport, type RawGapReport } from "./report";
 
 const MODEL = process.env.ANALYZE_MODEL ?? "claude-opus-5-5";
@@ -69,7 +69,7 @@ const GAP_REPORT_SCHEMA = {
 } as const;
 
 /** Compares the student's explanation (transcript + optional whiteboard) with the lecture notes. */
-export async function analyzeExplanation({ transcript, curriculumText, whiteboard }: AnalyzeRequest): Promise<GapReport> {
+export async function analyzeExplanation({ transcript, curriculumText, whiteboard }: LegacyAnalyzeRequest): Promise<LegacyGapReport> {
   const client = new Anthropic();
   const response = await client.beta.messages.create({
     model: MODEL,

@@ -2,13 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { analyzeExplanation } from "@/lib/curriculum/analyze";
 import { MAX_CURRICULUM_CHARS, tooLongMessage } from "@/lib/curriculum/limits";
-import type { AnalyzeRequest, ApiError, GapReport } from "@/types/session";
+import type { LegacyAnalyzeRequest, ApiError, LegacyGapReport } from "@/types/session";
 
 const fail = (status: number, error: string) => NextResponse.json<ApiError>({ error }, { status });
 
-/** AnalyzeRequest { transcript, curriculumText, whiteboard? } -> GapReport. */
+/** LegacyAnalyzeRequest { transcript, curriculumText, whiteboard? } -> LegacyGapReport. */
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as Partial<AnalyzeRequest> | null;
+  const body = (await req.json().catch(() => null)) as Partial<LegacyAnalyzeRequest> | null;
   const transcript = typeof body?.transcript === "string" ? body.transcript.trim() : "";
   const curriculumText = typeof body?.curriculumText === "string" ? body.curriculumText.trim() : "";
   const whiteboard = typeof body?.whiteboard?.pngBase64 === "string" && body.whiteboard.pngBase64 ? body.whiteboard : undefined;
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) return fail(500, "ANTHROPIC_API_KEY is not set on the server.");
 
   try {
-    return NextResponse.json<GapReport>(await analyzeExplanation({ transcript, curriculumText, whiteboard }));
+    return NextResponse.json<LegacyGapReport>(await analyzeExplanation({ transcript, curriculumText, whiteboard }));
   } catch (err) {
     console.error("analyze failed", err);
     if (err instanceof Anthropic.AuthenticationError) return fail(500, "The server's ANTHROPIC_API_KEY was rejected.");

@@ -1,12 +1,12 @@
-import type { GapReport, StudyStep } from "@/types/session";
+import type { LegacyGapReport, StudyStep } from "@/types/session";
 
-/** GapReport as the model returns it: the schema forces gapId to be present, so "none" arrives as null. */
-export type RawGapReport = Omit<GapReport, "studyPlan"> & {
+/** LegacyGapReport as the model returns it: the schema forces gapId to be present, so "none" arrives as null. */
+export type RawGapReport = Omit<LegacyGapReport, "studyPlan"> & {
   studyPlan: (Omit<StudyStep, "gapId"> & { gapId?: string | null })[];
 };
 
 /** Enforces what the JSON schema cannot: the score range and that every gapId points at a real gap. */
-export function normalizeReport(raw: RawGapReport): GapReport {
+export function normalizeReport(raw: RawGapReport): LegacyGapReport {
   const gapIds = new Set(raw.gaps.map((gap) => gap.id));
   return {
     ...raw,

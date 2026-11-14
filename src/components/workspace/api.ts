@@ -1,10 +1,10 @@
 // Thin typed fetch helpers for the workspace UI. All keys stay in the server routes.
 import type {
-  AnalyzeRequest,
+  LegacyAnalyzeRequest,
   ApiError,
   CurriculumContext,
-  GapReport,
-  KnowledgeGap,
+  LegacyGapReport,
+  LegacyKnowledgeGap,
   VisualExplainer,
   VisualRequest,
 } from "@/types/session";
@@ -25,8 +25,8 @@ export async function parsePdf(file: File): Promise<CurriculumContext> {
   return readJson<CurriculumContext>(await fetch("/api/parse-pdf", { method: "POST", body: form }));
 }
 
-export async function analyze(req: AnalyzeRequest): Promise<GapReport> {
-  return readJson<GapReport>(
+export async function analyze(req: LegacyAnalyzeRequest): Promise<LegacyGapReport> {
+  return readJson<LegacyGapReport>(
     await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -35,7 +35,7 @@ export async function analyze(req: AnalyzeRequest): Promise<GapReport> {
   );
 }
 
-export function visualRequestFor(gap: KnowledgeGap, topic?: string): VisualRequest {
+export function visualRequestFor(gap: LegacyKnowledgeGap, topic?: string): VisualRequest {
   return {
     concept: gap.concept,
     misconception: gap.misconception,
