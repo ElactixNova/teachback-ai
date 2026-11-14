@@ -357,6 +357,7 @@ export function Workspace() {
       getReport: () => latest.current.report,
       generateVisualExplainer: (id?: string) => generateVisualExplainer(id),
       writeOnBoard: (note) => boardRef.current?.addNote(note) ?? { status: "hidden" },
+      speechProgress: (chars, done) => boardRef.current?.speech(chars, done),
     }),
     [parkCriterion, checkExplanation, finishSession, generateVisualExplainer],
   );

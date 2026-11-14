@@ -20,8 +20,6 @@ export interface NoteInput {
 /** What happened to a note, so the avatar can react naturally. */
 export type NoteOutcome = { status: "written"; where: string } | { status: "queued" } | { status: "hidden" };
 
-/** Card metrics in screen px at the moment the note is written. The card, the placement and the PNG export share them. */
-export const NOTE = { font: 20, charW: 12, line: 28, pad: 12, label: 20, radius: 12 } as const;
 /** Clear space kept around every stroke and every other note, in screen px. */
 export const NOTE_MARGIN = 24;
 export const MAX_NOTE_CHARS = 200;
@@ -58,7 +56,7 @@ export function admitNote(
   return { ok: true, note: { content, kind: input.kind === "text" ? "text" : "math", ...(label ? { label } : {}) } };
 }
 
-// ---- how it reads and how big it is ------------------------------------------------------------
+// ---- how it reads ------------------------------------------------------------------------------
 
 const SYMBOLS: Record<string, string> = {
   times: "×", cdot: "·", div: "÷", pm: "±", mp: "∓", leq: "≤", le: "≤", geq: "≥", ge: "≥", neq: "≠", ne: "≠",
@@ -66,7 +64,7 @@ const SYMBOLS: Record<string, string> = {
   gamma: "γ", delta: "δ", Delta: "Δ", lambda: "λ", mu: "μ", sigma: "σ", omega: "ω", degree: "°",
 };
 
-/** LaTeX as readable plain text ("\frac{1}{x}" -> "(1)/(x)"). Used on the card and in the examiner PNG. */
+/** LaTeX as readable plain text ("\frac{1}{x}" -> "(1)/(x)"): the accessible label of what Sam wrote. */
 export function plainMath(latex: string): string {
   let t = latex;
   // Innermost first, a few passes for nesting.
@@ -84,33 +82,6 @@ export function plainMath(latex: string): string {
     .replace(/[{}]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-/** Wraps the text to at most ~45% of the viewport width and returns the card size, all in screen px. */
-export function noteLayout(text: string, viewportW: number): { lines: string[]; w: number; h: number } {
-  const maxW = Math.max(160, viewportW * 0.45);
-  const maxChars = Math.max(8, Math.floor((maxW - 2 * NOTE.pad) / NOTE.charW));
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(" ")) {
-    let rest = word;
-    // A single token longer than a line (a long expression without spaces) is cut.
-    while (rest.length > maxChars) {
-      if (line) lines.push(line);
-      lines.push(rest.slice(0, maxChars));
-      rest = rest.slice(maxChars);
-      line = "";
-    }
-    if (!line) line = rest;
-    else if (line.length + 1 + rest.length <= maxChars) line += ` ${rest}`;
-    else {
-      lines.push(line);
-      line = rest;
-    }
-  }
-  if (line) lines.push(line);
-  const longest = Math.max(6, ...lines.map((l) => l.length));
-  return { lines, w: 2 * NOTE.pad + longest * NOTE.charW, h: 2 * NOTE.pad + NOTE.label + lines.length * NOTE.line };
 }
 
 // ---- where it goes -----------------------------------------------------------------------------
@@ -156,4 +127,263 @@ export function shiftIntoView(r: Rect, viewport: Rect, margin: number): { dx: nu
     return 0;
   };
   return { dx: axis(r.x, r.w, viewport.x, viewport.w), dy: axis(r.y, r.h, viewport.y, viewport.h) };
+}
+
+// ---- handwriting (T22) -------------------------------------------------------------------------
+// Sam writes the question by hand, in step with its voice. The layout below turns the question
+// (plain words with LaTeX-style maths) into pen ops in writing order; `revealScript` says how much
+// of them to draw at a given progress; `writeProgress` turns speech and time into that progress.
+// A handwriting font drawn through these ops was chosen over a single-stroke vector font: the same
+// ops draw on screen and into the examiner PNG, and no glyph table has to be hand-made and verified.
+
+/** Width of `text` at font size `size`, in px. Injected (canvas measureText in the browser) so the layout stays pure. */
+export type Measure = (text: string, size: number) => number;
+
+export type PenOp =
+  /** A run of letters; (x, y) is the left end of its baseline; w is its width. */
+  | { kind: "text"; text: string; x: number; y: number; size: number; w: number }
+  /** A straight pen stroke (fraction bar, root sign); w is its length. */
+  | { kind: "line"; x1: number; y1: number; x2: number; y2: number; w: number };
+
+export interface Script {
+  ops: PenOp[];
+  w: number;
+  h: number;
+}
+
+/** Sam's writing size in px at the zoom it was written at, and the room kept around it. */
+export const HAND = { size: 28, pad: 8, tag: 16 } as const;
+
+type Node =
+  | { t: "text"; s: string }
+  | { t: "row"; body: Node[] }
+  | { t: "sup" | "sub" | "sqrt"; body: Node[] }
+  | { t: "frac"; num: Node[]; den: Node[] };
+
+function parseScript(src: string): Node[] {
+  let i = 0;
+  const seq = (end?: string): Node[] => {
+    const out: Node[] = [];
+    while (i < src.length && src[i] !== end) out.push(atom());
+    return out;
+  };
+  /** The argument of a command or of ^ / _: a {group} or the next single token. */
+  const arg = (): Node[] => {
+    while (src[i] === " ") i++;
+    if (src[i] !== "{") return i < src.length ? [atom(true)] : [];
+    i++;
+    const body = seq("}");
+    i++;
+    return body;
+  };
+  const atom = (single = false): Node => {
+    const c = src[i];
+    if (c === "\\") {
+      const m = /^\\([A-Za-z]+|.?)/.exec(src.slice(i))!;
+      i += m[0].length;
+      const name = m[1];
+      if (/^[dt]?frac$/.test(name)) return { t: "frac", num: arg(), den: arg() };
+      if (name === "sqrt") return { t: "sqrt", body: arg() };
+      if (/^(text|mathrm|mathbf|operatorname)$/.test(name)) return { t: "row", body: arg() };
+      if (name === "left" || name === "right") return { t: "text", s: "" };
+      if (name.length === 1 && !/[A-Za-z]/.test(name)) return { t: "text", s: ",;:! ".includes(name) ? " " : name };
+      return { t: "text", s: SYMBOLS[name] ?? name };
+    }
+    if (c === "^" || c === "_") {
+      i++;
+      return { t: c === "^" ? "sup" : "sub", body: arg() };
+    }
+    if (c === "{") {
+      i++;
+      const body = seq("}");
+      i++;
+      return { t: "row", body };
+    }
+    if (c === "}" || c === "$") {
+      i++;
+      return { t: "text", s: "" };
+    }
+    const m = single ? [c] : /^[^\\^_{}$]+/.exec(src.slice(i))!;
+    i += m[0].length;
+    return { t: "text", s: m[0] };
+  };
+  return seq();
+}
+
+interface Box {
+  w: number;
+  asc: number;
+  desc: number;
+  ops: PenOp[];
+}
+
+const shift = (ops: PenOp[], dx: number, dy: number): PenOp[] =>
+  ops.map((o) => (o.kind === "text" ? { ...o, x: o.x + dx, y: o.y + dy } : { ...o, x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy }));
+const stroke = (x1: number, y1: number, x2: number, y2: number): PenOp => ({ kind: "line", x1, y1, x2, y2, w: Math.hypot(x2 - x1, y2 - y1) });
+
+/** Lays nodes out left to right on one baseline (y = 0, up is negative). */
+function layoutRow(nodes: Node[], size: number, measure: Measure): Box {
+  const box: Box = { w: 0, asc: size * 0.72, desc: size * 0.22, ops: [] };
+  const add = (b: Box, dy = 0) => {
+    box.ops.push(...shift(b.ops, box.w, dy));
+    box.asc = Math.max(box.asc, b.asc - dy);
+    box.desc = Math.max(box.desc, b.desc + dy);
+    box.w += b.w;
+  };
+  for (const n of nodes) {
+    if (n.t === "text") {
+      if (!n.s) continue;
+      const w = measure(n.s, size);
+      add({ w, asc: size * 0.72, desc: size * 0.22, ops: n.s.trim() ? [{ kind: "text", text: n.s, x: 0, y: 0, size, w }] : [] });
+    } else if (n.t === "row") add(layoutRow(n.body, size, measure));
+    else if (n.t === "sup") add(layoutRow(n.body, size * 0.68, measure), -size * 0.42);
+    else if (n.t === "sub") add(layoutRow(n.body, size * 0.68, measure), size * 0.2);
+    else if (n.t === "frac") {
+      // Numerator, then the bar, then the denominator: the order a hand writes them.
+      const num = layoutRow(n.num, size * 0.8, measure);
+      const den = layoutRow(n.den, size * 0.8, measure);
+      const w = Math.max(num.w, den.w) + size * 0.3;
+      const axis = size * 0.28;
+      const gap = size * 0.12;
+      const numY = -axis - gap - num.desc;
+      const denY = -axis + gap + den.asc;
+      add({
+        w,
+        asc: -numY + num.asc,
+        desc: denY + den.desc,
+        ops: [...shift(num.ops, (w - num.w) / 2, numY), stroke(0, -axis, w, -axis), ...shift(den.ops, (w - den.w) / 2, denY)],
+      });
+    } else {
+      // Square root: tick, down, up, then the bar over the body, then the body.
+      const body = layoutRow(n.body, size, measure);
+      const hook = size * 0.5;
+      const top = -(body.asc + size * 0.1);
+      add({
+        w: hook + body.w + size * 0.1,
+        asc: -top + size * 0.06,
+        desc: body.desc,
+        ops: [
+          stroke(0, -size * 0.25, size * 0.14, -size * 0.3),
+          stroke(size * 0.14, -size * 0.3, size * 0.3, body.desc * 0.6),
+          stroke(size * 0.3, body.desc * 0.6, hook, top),
+          stroke(hook, top, hook + body.w + size * 0.1, top),
+          ...shift(body.ops, hook + size * 0.04, 0),
+        ],
+      });
+    }
+  }
+  return box;
+}
+
+/** Splits the top level into words at spaces, keeping ^ and _ attached to what they follow. */
+function words(nodes: Node[]): Node[][] {
+  const out: Node[][] = [];
+  let word: Node[] = [];
+  const flush = () => {
+    if (word.length) out.push(word);
+    word = [];
+  };
+  for (const n of nodes) {
+    if (n.t !== "text") {
+      word.push(n);
+      continue;
+    }
+    n.s.split(/( +)/).forEach((piece) => {
+      if (!piece) return;
+      if (piece.trim()) word.push({ t: "text", s: piece });
+      else flush();
+    });
+  }
+  flush();
+  return out;
+}
+
+/**
+ * The pen ops for a question, wrapped at spaces to `maxWidth`. Coordinates are px from the top-left
+ * of the writing at font size `size`; the size is final, so it can be placed before the pen starts.
+ */
+export function layoutScript(content: string, maxWidth: number, measure: Measure, size: number = HAND.size): Script {
+  const space = measure(" ", size);
+  const lines: Box[] = [];
+  let line: Box = { w: 0, asc: 0, desc: 0, ops: [] };
+  for (const word of words(parseScript(content))) {
+    const b = layoutRow(word, size, measure);
+    if (line.w > 0 && line.w + space + b.w > maxWidth) {
+      lines.push(line);
+      line = { w: 0, asc: 0, desc: 0, ops: [] };
+    }
+    const x = line.w > 0 ? line.w + space : 0;
+    line = { w: x + b.w, asc: Math.max(line.asc, b.asc), desc: Math.max(line.desc, b.desc), ops: [...line.ops, ...shift(b.ops, x, 0)] };
+  }
+  if (line.w > 0) lines.push(line);
+  const ops: PenOp[] = [];
+  let y = 0;
+  for (const l of lines) {
+    ops.push(...shift(l.ops, 0, y + l.asc));
+    y += l.asc + l.desc + size * 0.15;
+  }
+  return { ops, w: Math.max(0, ...lines.map((l) => l.w)), h: Math.max(0, y - size * 0.15) };
+}
+
+/** What to draw at progress p (0..1): whole ops, at most one part-written op, and where the pen tip is. */
+export function revealScript(ops: PenOp[], p: number): { whole: PenOp[]; partial: { op: PenOp; frac: number } | null; nib: { x: number; y: number } | null } {
+  const total = ops.reduce((sum, o) => sum + o.w, 0);
+  if (p >= 1 || total === 0) return { whole: ops, partial: null, nib: null };
+  let ink = Math.max(0, p) * total;
+  const whole: PenOp[] = [];
+  for (const op of ops) {
+    if (ink >= op.w) {
+      whole.push(op);
+      ink -= op.w;
+      continue;
+    }
+    const frac = op.w > 0 ? ink / op.w : 0;
+    const nib = op.kind === "text" ? { x: op.x + op.w * frac, y: op.y - op.size * 0.3 } : { x: op.x1 + (op.x2 - op.x1) * frac, y: op.y1 + (op.y2 - op.y1) * frac };
+    return { whole, partial: { op, frac }, nib };
+  }
+  return { whole, partial: null, nib: null };
+}
+
+// ---- in step with Sam's voice ------------------------------------------------------------------
+
+/** The pen never writes a whole question faster than this, even if the speech text arrives in one burst. */
+export const MIN_WRITE_MS = 1200;
+/** However slowly Sam speaks (or if it never does), the question is complete after this long. */
+export const MAX_WRITE_MS = 8000;
+/** When Sam stops or is interrupted, the rest is written within this long: never left half-written. */
+export const FINISH_MS = 400;
+
+export interface WriteClock {
+  startedAt: number;
+  /** Characters Sam is expected to speak while giving the question. */
+  expectedChars: number;
+  /** Fallback when speech text is late or missing: the time the question takes to say at ~2.5 words a second. */
+  durationMs: number;
+  /** Characters of speech heard since the pen started (Anam's streamed message chunks). */
+  spokenChars: number;
+  /** When Sam's turn ended or was interrupted, or null while it is still speaking. */
+  endedAt: number | null;
+}
+
+/** How long the question is when spoken: letters as they are, each digit or symbol about one short word. */
+export function spokenLength(plain: string): number {
+  let n = 0;
+  for (const ch of plain) n += /[A-Za-z\s]/.test(ch) ? 1 : 5;
+  return Math.max(12, n);
+}
+
+export function startClock(plain: string, now: number): WriteClock {
+  const expectedChars = spokenLength(plain);
+  const durationMs = Math.min(MAX_WRITE_MS, Math.max(1500, (expectedChars / 5 / 2.5) * 1000));
+  return { startedAt: now, expectedChars, durationMs, spokenChars: 0, endedAt: null };
+}
+
+/** 0..1: how much of the question is written at `now`. Never goes backwards as time passes. */
+export function writeProgress(c: WriteClock, now: number): number {
+  const t = now - c.startedAt;
+  if (t >= MAX_WRITE_MS) return 1;
+  // The voice leads; the timer keeps the pen moving when no speech text arrives.
+  let p = Math.min(Math.max(c.spokenChars / c.expectedChars, t / c.durationMs), t / MIN_WRITE_MS);
+  if (c.endedAt !== null) p = Math.max(p, (now - c.endedAt) / FINISH_MS);
+  return Math.min(1, Math.max(0, p));
 }

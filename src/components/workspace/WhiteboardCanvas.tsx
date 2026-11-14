@@ -3,8 +3,25 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Eraser, LoaderCircle, Maximize, Minus, Move, Pen, Plus, ScanSearch, Trash2, Undo2 } from "lucide-react";
 import type { WhiteboardSnapshot } from "@/types/session";
-import { MathText } from "./MathText";
-import { NOTE, NOTE_MARGIN, describeSpot, noteLayout, placeNote, plainMath, shiftIntoView, type NoteInput, type NoteOutcome, type Rect } from "@/lib/board/notes";
+import {
+  HAND,
+  NOTE_MARGIN,
+  describeSpot,
+  layoutScript,
+  placeNote,
+  plainMath,
+  revealScript,
+  shiftIntoView,
+  startClock,
+  writeProgress,
+  type Measure,
+  type NoteInput,
+  type NoteOutcome,
+  type PenOp,
+  type Rect,
+  type Script,
+  type WriteClock,
+} from "@/lib/board/notes";
 
 /**
  * An infinite whiteboard. Strokes are stored in WORLD coordinates; the view (pan x/y in CSS px, zoom scale)
@@ -29,44 +46,72 @@ interface View {
 }
 
 /**
- * A question Sam wrote on the board (T20). Lives in its own layer: it is not a stroke, so Undo and Clear
- * leave it alone. Stored in world coordinates; `k` is world units per card px (1 / zoom when it was written).
+ * A question Sam wrote on the board (T20, T22). Lives in its own layer: it is not a stroke, so Undo and
+ * Clear leave it alone. Stored in world coordinates; `k` is world units per writing px (1 / zoom when it
+ * was written). Its size is final from the start, so nothing moves while the pen writes.
  */
 interface SamNote extends Rect {
   id: number;
   label: string;
-  lines: string[];
+  /** What it says, in plain words, for screen readers. */
+  plain: string;
+  script: Script;
   k: number;
-  /** LaTeX source of a math note: the card typesets it with KaTeX (the exported PNG keeps the plain `lines`). */
-  tex?: string;
+  /** While the pen is still writing; null once finished. Mutated in place as Sam's speech arrives. */
+  clock: WriteClock | null;
 }
 
 /** Screen px reserved for the tool dock (top) and the zoom / check controls (bottom): notes stay out of them. */
 const DOCK_PX = 64;
 const CONTROLS_PX = 88;
+/** Sam writes in indigo, never one of the student's four pen colours, so the examiner can tell them apart. */
 const NOTE_INK = "#4f46e5";
-const NOTE_FILL = "#eef2ff";
-const NOTE_TEXT = "#1e1b4b";
 
-/** Draws a card into the exported PNG: same indigo "Sam" card the student sees, so the examiner can tell it from their work. */
-function drawNote(ctx: CanvasRenderingContext2D, n: SamNote) {
+/**
+ * Draws Sam's handwriting up to progress p (1 = finished). The same function draws the live layer and the
+ * exported PNG; `tag` adds the small "Sam" label that the live layer shows as a DOM chip instead.
+ */
+function drawWriting(ctx: CanvasRenderingContext2D, n: SamNote, p: number, family: string, tag: boolean) {
   ctx.save();
   ctx.translate(n.x, n.y);
   ctx.scale(n.k, n.k);
-  ctx.beginPath();
-  ctx.roundRect(0, 0, n.w / n.k, n.h / n.k, NOTE.radius);
-  ctx.fillStyle = NOTE_FILL;
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = NOTE_INK;
-  ctx.stroke();
-  ctx.textBaseline = "middle";
   ctx.fillStyle = NOTE_INK;
-  ctx.font = "bold 12px sans-serif";
-  ctx.fillText(n.label.toUpperCase(), NOTE.pad, NOTE.pad + NOTE.label / 2);
-  ctx.fillStyle = NOTE_TEXT;
-  ctx.font = `${NOTE.font}px sans-serif`;
-  n.lines.forEach((line, i) => ctx.fillText(line, NOTE.pad, NOTE.pad + NOTE.label + i * NOTE.line + NOTE.line / 2));
+  ctx.strokeStyle = NOTE_INK;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = "round";
+  ctx.textBaseline = "alphabetic";
+  if (tag) {
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(n.label, HAND.pad, HAND.pad + HAND.tag - 5);
+  }
+  ctx.translate(HAND.pad, HAND.pad + HAND.tag);
+  const ink = (op: PenOp, frac = 1) => {
+    if (op.kind === "line") {
+      ctx.beginPath();
+      ctx.moveTo(op.x1, op.y1);
+      ctx.lineTo(op.x1 + (op.x2 - op.x1) * frac, op.y1 + (op.y2 - op.y1) * frac);
+      ctx.stroke();
+      return;
+    }
+    ctx.save();
+    if (frac < 1) {
+      // The run being written appears left to right, as far as the pen has got.
+      ctx.beginPath();
+      ctx.rect(op.x - 2, op.y - op.size, op.w * frac + 2, op.size * 1.4);
+      ctx.clip();
+    }
+    ctx.font = `700 ${op.size}px ${family}`;
+    ctx.fillText(op.text, op.x, op.y);
+    ctx.restore();
+  };
+  const { whole, partial, nib } = revealScript(n.script.ops, p);
+  whole.forEach((op) => ink(op));
+  if (partial) ink(partial.op, partial.frac);
+  if (nib) {
+    ctx.beginPath();
+    ctx.arc(nib.x, nib.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -77,8 +122,10 @@ export interface WhiteboardHandle {
   exportSnapshot: () => WhiteboardSnapshot | null;
   clear: () => void;
   isEmpty: () => boolean;
-  /** Sam writes a question on the board, in free space. Queued while the pen is down or the board is hidden. */
+  /** Sam writes a question on the board by hand, in free space. Queued while the pen is down, the board is hidden, or another note is being written. */
   addNote: (note: NoteInput) => NoteOutcome;
+  /** Sam's speech as it streams: characters just spoken, and whether the turn ended. Moves the pen of a note being written. */
+  speech: (chars: number, done: boolean) => void;
 }
 
 const INKS = [
@@ -199,6 +246,54 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     notesRef.current = fn(notesRef.current);
     setNotes(notesRef.current);
   }, []);
+  // Sam's handwriting has its own canvas above the ink: the eraser never touches it.
+  const samCanvasRef = useRef<HTMLCanvasElement>(null);
+  const handFont = useRef("cursive");
+  const measureCtx = useRef<CanvasRenderingContext2D | null>(null);
+  const samFrame = useRef(0);
+  const samLoop = useRef<() => void>(() => {});
+  const afterWriting = useRef<() => void>(() => {});
+
+  /** Draws every note at its current progress, and keeps a frame loop going while a pen is writing. */
+  const drawSam = useCallback(() => {
+    const canvas = samCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const { dpr } = size.current;
+    const { x, y, scale } = viewRef.current;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * x, dpr * y);
+    const now = performance.now();
+    const done: number[] = [];
+    let writing = false;
+    for (const n of notesRef.current) {
+      const p = n.clock ? writeProgress(n.clock, now) : 1;
+      drawWriting(ctx, n, p, handFont.current, false);
+      if (n.clock && p >= 1) done.push(n.id);
+      else if (n.clock) writing = true;
+    }
+    if (done.length) {
+      updateNotes((ns) => ns.map((n) => (done.includes(n.id) ? { ...n, clock: null } : n)));
+      afterWriting.current(); // the next queued question, if any
+    }
+    if (writing && !samFrame.current) {
+      samFrame.current = requestAnimationFrame(() => {
+        samFrame.current = 0;
+        samLoop.current();
+      });
+    }
+  }, [updateNotes]);
+  useEffect(() => {
+    samLoop.current = drawSam;
+    return () => cancelAnimationFrame(samFrame.current);
+  }, [drawSam]);
+  // The handwriting font the page already loads (layout.tsx): make sure it is ready before the pen needs it.
+  useEffect(() => {
+    const family = wrapRef.current ? getComputedStyle(wrapRef.current).getPropertyValue("--font-caveat").trim() : "";
+    handFont.current = family ? `${family}, cursive` : "cursive";
+    void document.fonts?.load(`700 ${HAND.size}px ${handFont.current}`).then(() => samLoop.current());
+  }, []);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -211,7 +306,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * x, dpr * y);
     for (const s of strokes.current) drawStroke(ctx, s);
     if (current.current) drawStroke(ctx, current.current);
-  }, []);
+    drawSam();
+  }, [drawSam]);
 
   const applyView = useCallback(
     (v: View) => {
@@ -250,10 +346,16 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       const v = viewRef.current;
       const { w, h } = size.current;
       const k = 1 / v.scale;
-      const isMath = input.kind === "math";
-      const layout = noteLayout(isMath ? plainMath(input.content) : input.content, w);
-      // Typeset maths (fractions, roots) is taller than a plain line: reserve room so the card never overlaps ink.
-      const box = { w: layout.w * k * (isMath ? 1.1 : 1), h: layout.h * k * (isMath ? 1.5 : 1) };
+      const plain = input.kind === "math" ? plainMath(input.content) : input.content;
+      const measure: Measure = (text, px) => {
+        const c = (measureCtx.current ??= document.createElement("canvas").getContext("2d"));
+        if (!c) return text.length * px * 0.45;
+        c.font = `700 ${px}px ${handFont.current}`;
+        return c.measureText(text).width;
+      };
+      // The final size, before the pen starts: wrapped to ~45% of what the student can see.
+      const script = layoutScript(input.content, Math.max(160, w * 0.45), measure);
+      const box = { w: (script.w + 2 * HAND.pad) * k, h: (script.h + HAND.tag + 2 * HAND.pad) * k };
       const viewport: Rect = { x: -v.x * k, y: (DOCK_PX - v.y) * k, w: w * k, h: Math.max(0, h - DOCK_PX - CONTROLS_PX) * k };
       const ink: Rect[] = [];
       for (const s of strokes.current) {
@@ -261,8 +363,20 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         if (b) ink.push({ x: b.x0, y: b.y0, w: b.x1 - b.x0, h: b.y1 - b.y0 });
       }
       const spot = placeNote(ink, notesRef.current, viewport, box, NOTE_MARGIN * k);
-      const note: SamNote = { id: ++noteId.current, label: input.label ? `Sam · ${input.label}` : "Sam", lines: layout.lines, x: spot.x, y: spot.y, ...box, k, ...(isMath ? { tex: input.content } : {}) };
+      const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const note: SamNote = {
+        id: ++noteId.current,
+        label: input.label ? `Sam · ${input.label}` : "Sam",
+        plain,
+        script,
+        x: spot.x,
+        y: spot.y,
+        ...box,
+        k,
+        clock: still ? null : startClock(plain, performance.now()),
+      };
       updateNotes((ns) => [...ns, note]);
+      drawSam();
       if (spot.inView) return { status: "written", where: describeSpot(note, viewport) };
       // Nothing free on screen: glide the board so the note is visible. Stops if the student touches the board.
       const { dx, dy } = shiftIntoView(note, viewport, NOTE_MARGIN * k);
@@ -278,17 +392,30 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       requestAnimationFrame(glide);
       return { status: "written", where: "below their work (the board scrolled to show it)" };
     },
-    [applyView, updateNotes],
+    [applyView, updateNotes, drawSam],
   );
 
-  /** Writes the queued notes once the pen is up and the board is visible. */
+  /** Writes the next queued note once the pen is up, the board is visible and Sam's own pen is free. */
   const flushNotes = useCallback(() => {
     const hidden = (wrapRef.current?.getBoundingClientRect().width ?? 0) < 1;
-    if (hidden || current.current || pointers.current.size > 0) return;
-    const queued = pendingNotes.current;
-    pendingNotes.current = [];
-    queued.forEach(placeNow);
+    if (hidden || current.current || pointers.current.size > 0 || notesRef.current.some((n) => n.clock)) return;
+    const next = pendingNotes.current.shift();
+    if (next) placeNow(next);
   }, [placeNow]);
+  useEffect(() => {
+    afterWriting.current = flushNotes;
+  }, [flushNotes]);
+
+  const speech = useCallback((chars: number, done: boolean) => {
+    const now = performance.now();
+    for (const n of notesRef.current) {
+      const c = n.clock;
+      if (!c) continue;
+      c.spokenChars += chars;
+      // An end-of-turn before Sam has said anything belongs to the previous sentence: ignore it.
+      if (done && c.spokenChars > 0) c.endedAt ??= now;
+    }
+  }, []);
 
   const addNote = useCallback(
     (input: NoteInput): NoteOutcome => {
@@ -298,7 +425,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         pendingNotes.current.push(input);
         return { status: "hidden" };
       }
-      if (current.current || pointers.current.size > 0 || noteTimer.current) {
+      // One question at a time: a second one waits for the pen to finish the first.
+      if (current.current || pointers.current.size > 0 || noteTimer.current || notesRef.current.some((n) => n.clock)) {
         pendingNotes.current.push(input);
         return { status: "queued" };
       }
@@ -324,6 +452,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       size.current = { w: rect.width, h: rect.height, dpr };
       canvas.width = Math.max(1, Math.round(rect.width * dpr));
       canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      if (samCanvasRef.current) {
+        samCanvasRef.current.width = canvas.width;
+        samCanvasRef.current.height = canvas.height;
+      }
       redraw();
       flushNotes(); // the board is visible again: write what Sam queued meanwhile
     });
@@ -570,7 +702,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(ink, 0, 0);
     ctx.setTransform(scale, 0, 0, scale, -x0 * scale, -y0 * scale);
-    for (const n of notesRef.current) drawNote(ctx, n);
+    // Always the finished question, even if the pen is mid-word right now.
+    for (const n of notesRef.current) drawWriting(ctx, n, 1, handFont.current, true);
     const dataUrl = out.toDataURL("image/png");
     return {
       pngBase64: dataUrl.slice(dataUrl.indexOf(",") + 1),
@@ -588,8 +721,9 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       clear,
       isEmpty: () => strokes.current.length === 0,
       addNote,
+      speech,
     }),
-    [exportSnapshot, clear, addNote],
+    [exportSnapshot, clear, addNote, speech],
   );
 
   const toolBtn = (active: boolean) =>
@@ -627,27 +761,26 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           </p>
         )}
 
-        {/* Sam's notes: a layer above the ink, below the controls. Drag a card to move it, x to remove it. */}
+        {/* Sam's handwriting: its own canvas above the ink, below the controls. */}
+        <canvas ref={samCanvasRef} data-sam-layer className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
+        {/* One box per note for the "Sam" tag, the x, dragging (once written) and the screen-reader label. */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {notes.map((n) => (
             <div
               key={n.id}
               data-sam-note
+              data-writing={n.clock ? "true" : "false"}
               role="note"
-              aria-label={`${n.label} wrote: ${n.lines.join(" ")}`}
-              className="pointer-events-auto absolute left-0 top-0 origin-top-left cursor-grab touch-none select-none active:cursor-grabbing"
+              aria-label={`${n.label} wrote: ${n.plain}`}
+              className={`pointer-events-auto absolute left-0 top-0 origin-top-left touch-none select-none ${n.clock ? "" : "cursor-grab active:cursor-grabbing"}`}
               style={{
                 width: n.w / n.k,
                 height: n.h / n.k,
-                padding: NOTE.pad,
-                borderRadius: NOTE.radius,
-                border: `2px solid ${NOTE_INK}`,
-                background: NOTE_FILL,
-                color: NOTE_TEXT,
                 transform: `translate(${n.x * view.scale + view.x}px, ${n.y * view.scale + view.y}px) scale(${view.scale * n.k})`,
               }}
               onPointerDown={(e) => {
-                if ((e.target as HTMLElement).closest("button")) return;
+                // Movable only once the pen has finished writing it.
+                if (n.clock || (e.target as HTMLElement).closest("button")) return;
                 e.currentTarget.setPointerCapture(e.pointerId);
                 noteDrag.current = { id: n.id, x: e.clientX, y: e.clientY };
               }}
@@ -658,31 +791,27 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
                 const dy = (e.clientY - d.y) / viewRef.current.scale;
                 noteDrag.current = { id: n.id, x: e.clientX, y: e.clientY };
                 updateNotes((ns) => ns.map((m) => (m.id === n.id ? { ...m, x: m.x + dx, y: m.y + dy } : m)));
+                drawSam();
               }}
               onPointerUp={() => (noteDrag.current = null)}
               onPointerCancel={() => (noteDrag.current = null)}
             >
-              <div className="flex items-center justify-between font-bold uppercase" style={{ height: NOTE.label, fontSize: 12, color: NOTE_INK }}>
+              <div className="flex items-center gap-1 font-bold" style={{ height: HAND.tag, margin: `${HAND.pad - 4}px 0 0 ${HAND.pad}px`, fontSize: 11, color: NOTE_INK }}>
                 <span>{n.label}</span>
                 <button
                   type="button"
-                  onClick={() => updateNotes((ns) => ns.filter((m) => m.id !== n.id))}
-                  className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-sm leading-none hover:bg-indigo-100"
+                  onClick={() => {
+                    updateNotes((ns) => ns.filter((m) => m.id !== n.id));
+                    drawSam();
+                    afterWriting.current();
+                  }}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-xs leading-none hover:bg-indigo-100"
                   title="Remove this note"
                   aria-label="Remove Sam's note"
                 >
                   ×
                 </button>
               </div>
-              {n.tex ? (
-                <div style={{ fontSize: NOTE.font }}>
-                  <MathText text={`$${n.tex}$`} spoken={n.lines.join(" ")} />
-                </div>
-              ) : (
-                <div className="whitespace-pre" style={{ fontSize: NOTE.font, lineHeight: `${NOTE.line}px` }}>
-                  {n.lines.join("\n")}
-                </div>
-              )}
             </div>
           ))}
         </div>
