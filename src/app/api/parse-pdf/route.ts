@@ -16,17 +16,19 @@ export async function POST(req: Request) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-") return fail(400, "That file is not a PDF.");
 
-  let extracted: { text: string; totalPages: number };
+  let extracted: { text: string[]; totalPages: number };
   try {
-    extracted = await extractText(bytes, { mergePages: true });
+    extracted = await extractText(bytes, { mergePages: false });
   } catch (err) {
     console.error("parse-pdf failed", err);
     return fail(422, "Could not read that PDF.");
   }
 
-  const text = extracted.text.trim();
+  // Page markers let the mark scheme cite real page numbers: "[Page 2]" precedes each page's text.
+  const text = extracted.text.map((t, i) => `[Page ${i + 1}]\n${t.trim()}`).join("\n\n").trim();
+  const hasText = extracted.text.some((t) => t.trim());
   // shortcut: no OCR, so scanned or handwritten PDFs are rejected; add OCR if real notes need it.
-  if (!text) return fail(422, "No text found in that PDF. Scanned notes are not supported, upload a text PDF.");
+  if (!hasText) return fail(422, "No text found in that PDF. Scanned notes are not supported, upload a text PDF.");
   if (text.length > MAX_CURRICULUM_CHARS) return fail(413, tooLongMessage(text.length));
 
   return NextResponse.json<CurriculumContext>({
