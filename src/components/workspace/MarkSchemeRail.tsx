@@ -7,6 +7,7 @@ import { CurriculumUploader } from "./CurriculumUploader";
 import { MAX_ATTEMPTS } from "@/lib/rail/state";
 import { STATUS_LABEL, SourceChip, StatusIcon, displayStatus } from "./status";
 import { AskChip } from "./callouts";
+import { MathText } from "./MathText";
 import type { Async } from "./types";
 
 interface Props {
@@ -139,7 +140,7 @@ export function MarkSchemeRail({ curriculum, onCurriculumChange, scheme, results
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold leading-snug">
                         <span className="mr-1 text-faint">{i + 1}.</span>
-                        {c.title}
+                        <MathText text={c.title} />
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <p className={`text-xs ${s === "missed" ? "font-semibold text-missed" : s === "in_progress" ? "font-semibold text-accent" : "text-muted"}`}>

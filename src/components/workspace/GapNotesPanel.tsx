@@ -6,6 +6,8 @@ import { MarksPill, SEVERITY, ScoreRing, SeverityTag, SourceChip, StatusIcon, WO
 import type { VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
 import { AskChip, MissedCallout } from "./callouts";
+import { MathText, SpokenMath } from "./MathText";
+import { plainMath } from "./math";
 
 export type CheckState = { status: "idle" } | { status: "checking" } | { status: "error"; error: string };
 
@@ -84,7 +86,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
         <StatusIcon status={s} className="mt-0.5" />
         <div className="min-w-0 flex-1">
           {primary && <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Biggest gap</p>}
-          <h3 className="font-semibold leading-snug">{c.title}</h3>
+          <h3 className="font-semibold leading-snug"><MathText text={c.title} /></h3>
           <AskChip ask={c.ask} className="mt-1" />
           {s === "parked" && <p className="text-xs font-semibold text-parked">Parked after 2 tries</p>}
         </div>
@@ -100,7 +102,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
             What you said{r.evidence ? ` · ${r.evidence.timestamp}` : ""}
           </p>
           {r.evidence ? (
-            <blockquote className="mt-1.5 text-[15px] italic leading-6">“{r.evidence.quote}”</blockquote>
+            <blockquote className="mt-1.5 text-[15px] italic leading-6">“<SpokenMath text={r.evidence.quote} />”</blockquote>
           ) : (
             <p className="mt-1.5 text-sm italic text-muted">You didn’t say anything about this.</p>
           )}
@@ -115,7 +117,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
                 ) : (
                   <SquareCheck className="mt-1 h-3.5 w-3.5 shrink-0 text-accent" aria-label="Earned" />
                 )}
-                <span className={missing.has(e) ? "" : "text-muted"}>{e}</span>
+                <MathText text={e} className={missing.has(e) ? "" : "text-muted"} />
               </li>
             ))}
           </ul>
@@ -127,13 +129,13 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
           {r.boardObservation && (
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">On your board</dt>
-              <dd>{r.boardObservation}</dd>
+              <dd><MathText text={r.boardObservation} /></dd>
             </div>
           )}
           {r.fix && (
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-wider text-accent">How to close it</dt>
-              <dd className="font-semibold">{r.fix}</dd>
+              <dd className="font-semibold"><MathText text={r.fix} /></dd>
             </div>
           )}
         </dl>
@@ -145,7 +147,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
 
       {primary && (
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(200px,38%)] lg:items-start">
-          <VisualSlot state={visual} alt={`Diagram: ${c.title}`} onRetry={onRetryVisual} />
+          <VisualSlot state={visual} alt={`Diagram: ${plainMath(c.title)}`} onRetry={onRetryVisual} />
           <MissedCallout criterion={c} result={r} />
         </div>
       )}
@@ -248,7 +250,7 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
               {notCovered.map((c) => (
                 <li key={c.id} className="flex items-center gap-2">
                   <StatusIcon status="not_covered" />
-                  <span className="flex-1">{c.title}</span>
+                  <MathText text={c.title} className="flex-1" />
                   <span className="text-xs font-semibold text-faint">{c.marks} marks</span>
                 </li>
               ))}
@@ -275,8 +277,8 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
                   <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-canvas">
                     <input type="checkbox" checked={!!s.done} onChange={() => onToggleStep(s.id)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
                     <span className="min-w-0 flex-1">
-                      <span className={`block text-sm font-semibold ${s.done ? "text-faint line-through" : ""}`}>{s.title}</span>
-                      <span className="block text-xs text-muted">{s.detail}</span>
+                      <span className={`block text-sm font-semibold ${s.done ? "text-faint line-through" : ""}`}><MathText text={s.title} /></span>
+                      <span className="block text-xs text-muted"><MathText text={s.detail} /></span>
                     </span>
                     <span className="shrink-0 text-xs font-semibold text-faint">{s.estimatedMinutes} min</span>
                   </label>

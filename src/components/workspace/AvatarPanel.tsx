@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowRight, Clock3, Frown, LoaderCircle, Mic, MicOff, PenLine, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
 import type { Cue } from "@/types/session";
 import { ANAM_VIDEO_ID, type AvatarStatus, type TranscriptLine } from "./types";
+import { SpokenMath } from "./MathText";
 
 /** Sam's mood badge (Figma: Mood Badge 5:77): always icon + words, never colour alone. */
 const CUE_STYLE: Record<Cue, { label: string; className: string; Icon: LucideIcon }> = {
@@ -169,7 +170,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
                     }`}
                   >
                     <span className={`mr-1.5 text-[10px] font-semibold tabular-nums ${l.speaker === "student" ? "text-white/70" : "text-faint"}`}>{l.t}</span>
-                    {l.text}
+                    <SpokenMath text={l.text} />
                   </p>
                 </div>
               ),
