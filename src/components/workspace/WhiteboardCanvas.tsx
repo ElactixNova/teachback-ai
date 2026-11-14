@@ -22,10 +22,10 @@ export interface WhiteboardHandle {
 }
 
 const INKS = [
-  { name: "Black", value: "#14142b" },
-  { name: "Indigo", value: "#5b5ce6" },
-  { name: "Pink", value: "#ec4899" },
-  { name: "Green", value: "#10a36b" },
+  { name: "Black", value: "#111827" },
+  { name: "Blue", value: "#2563eb" },
+  { name: "Red", value: "#dc2626" },
+  { name: "Green", value: "#16a34a" },
 ];
 const ERASER_WIDTH = 28;
 /** Longest edge of the exported PNG, to keep the analyze payload small. */
@@ -239,10 +239,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       <div
         ref={wrapRef}
         className="relative min-h-0 flex-1 bg-white"
-        style={{
-          backgroundImage: "radial-gradient(circle, #a9abd9 1px, transparent 1.2px)",
-          backgroundSize: "24px 24px",
-        }}
+        style={{ backgroundImage: "radial-gradient(circle, #a9abd9 1px, transparent 1.2px)", backgroundSize: "24px 24px" }}
       >
         {/* Red margin rule (Figma: Whiteboard Canvas 14:319). */}
         <div className="pointer-events-none absolute inset-y-0 left-14 w-px bg-[#f2a7a7]" aria-hidden />
@@ -315,12 +312,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           </button>
         </div>
 
-        {/* Bottom row: label + state on the left, Snap & Check (Figma 29:508) on the right. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 pl-[72px]">
-          <p className="flex items-baseline gap-2">
-            <span className="text-base font-semibold tracking-[-0.01em]">Whiteboard</span>
-            <span className="text-xs text-faint">{checking ? "Checking" : hasInk ? "In use" : "Empty"}</span>
-          </p>
+        {/* Snap & Check (Figma 29:508), bottom right. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-end p-4">
           <button
             type="button"
             onClick={onSnapAndCheck}
@@ -329,8 +322,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           >
             {checking ? <LoaderCircle className="h-5 w-5 shrink-0 animate-spin" /> : <ScanSearch className="h-5 w-5 shrink-0" />}
             <span className="leading-tight">
-              <span className="block text-base font-semibold">{checking ? "Checking…" : "Snap & Check"}</span>
-              <span className="block text-xs text-white/80">{checking ? "Comparing with your mark scheme" : "Board + transcript vs your mark scheme"}</span>
+              <span className="block whitespace-nowrap text-base font-semibold">{checking ? "Checking…" : "Snap & Check"}</span>
+              <span className="block whitespace-nowrap text-xs text-white/80">{checking ? "Comparing with your mark scheme" : "Board + transcript vs your mark scheme"}</span>
             </span>
           </button>
         </div>

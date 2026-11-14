@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowRight, Clock3, Frown, LoaderCircle, Mic, MicOff, PenLine, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
 import type { Cue } from "@/types/session";
 import { ANAM_VIDEO_ID, type AvatarStatus, type TranscriptLine } from "./types";
@@ -12,6 +12,9 @@ const CUE_STYLE: Record<Cue, { label: string; className: string; Icon: LucideIco
   concerned: { label: "Not sure about that", className: "text-partial", Icon: Frown },
   surprised: { label: "Surprised", className: "text-[#7a3fd1]", Icon: Sparkle },
 };
+
+/** Tallest the composer grows before it scrolls (about four lines). */
+const COMPOSER_MAX_PX = 112;
 
 /** Detail strings from the bridge that mean "live, but the mic is blocked". */
 const MIC_BLOCKED = /microphone/i;
@@ -34,6 +37,18 @@ interface Props {
 export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, onDisconnect, onTypedLine, children, waiting = false }: Props) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Grow the composer with wrapped text (up to COMPOSER_MAX_PX), so the first line never scrolls out of view.
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    // border-box: the height includes the border, scrollHeight does not.
+    const full = el.scrollHeight + el.offsetHeight - el.clientHeight;
+    el.style.height = `${Math.min(full, COMPOSER_MAX_PX)}px`;
+    el.style.overflowY = full > COMPOSER_MAX_PX ? "auto" : "hidden";
+  }, [draft]);
   const live = status === "live";
   const micBlocked = live && !!statusDetail && MIC_BLOCKED.test(statusDetail);
 
@@ -162,7 +177,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
           )}
         </div>
         <form
-          className="flex items-end gap-2 pt-2"
+          className="flex items-end gap-2 px-1 pb-1 pt-2"
           onSubmit={(e) => {
             e.preventDefault();
             submit();
@@ -171,6 +186,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
           <label className="min-w-0 flex-1">
             <span className="sr-only">Type part of your explanation</span>
             <textarea
+              ref={inputRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -181,7 +197,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
               }}
               rows={1}
               placeholder="Type part of your explanation…"
-              className="block max-h-28 min-h-11 w-full resize-none rounded-full border border-line-strong bg-card px-4 py-2.5 text-sm outline-none placeholder:text-faint focus:border-accent"
+              className="block min-h-11 w-full resize-none overflow-y-hidden rounded-[22px] border border-line-strong bg-card px-4 py-2.5 text-sm leading-5 outline-none placeholder:text-faint"
             />
           </label>
           <button
