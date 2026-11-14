@@ -355,9 +355,15 @@ export function Workspace() {
       finishSession,
       getReport: () => latest.current.report,
       generateVisualExplainer: (id?: string) => generateVisualExplainer(id),
+      writeOnBoard: (note) => boardRef.current?.addNote(note) ?? { status: "hidden" },
     }),
     [parkCriterion, checkExplanation, finishSession, generateVisualExplainer],
   );
+
+  // Dev only: lets the headless board-notes test drive the avatar's actions without an Anam session.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __feynmanActions?: WorkspaceActions }).__feynmanActions = actions;
+  }, [actions]);
 
   const handlers: AvatarHandlers = useMemo(
     () => ({

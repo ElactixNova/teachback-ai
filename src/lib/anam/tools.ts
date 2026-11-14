@@ -8,6 +8,7 @@ export const TOOL = {
   generateVisualExplainer: "generate_visual_explainer",
   getRailStatus: "get_rail_status",
   parkCriterion: "park_criterion",
+  writeOnBoard: "write_on_board",
 } as const;
 
 export type ToolName = (typeof TOOL)[keyof typeof TOOL];
@@ -116,5 +117,16 @@ export const RAIL_TOOLS: AnamClientToolDefinition[] = [
     { criterion: { type: "string", description: "The point's title or id. Omit for the point with the most marks lost." } },
     undefined,
     10,
+  ),
+  railTool(
+    TOOL.writeOnBoard,
+    "Write your question on the student's whiteboard so they do not have to copy it down. Use it when your question contains an equation, a formula, numbers or a long expression. Write only the question, never an answer or a hint. Returns where on the board it was written, or that it is queued.",
+    {
+      content: { type: "string", description: "What to write, at most 200 characters. LaTeX when kind is math (for example x^2 + 5x + 6 = 0); plain words when kind is text." },
+      kind: { type: "string", description: 'Either "math" or "text".' },
+      label: { type: "string", description: "Optional short label, for example Question 1." },
+    },
+    ["content", "kind"],
+    5,
   ),
 ];

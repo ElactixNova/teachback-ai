@@ -9,6 +9,7 @@ import type {
   VisualExplainer,
   WhiteboardSnapshot,
 } from "@/types/session";
+import type { NoteInput, NoteOutcome } from "@/lib/board/notes";
 
 /** DOM id of the <video> element the Anam SDK streams into (the bridge calls streamToVideoElement with it). */
 export const ANAM_VIDEO_ID = "anam-video";
@@ -50,6 +51,7 @@ export interface RailSnapshot {
  *   park_criterion            -> parkCriterion(id)
  *   open_gap_report           -> checkExplanation() (or openGapReport() to reuse the last report)
  *   generate_visual_explainer -> generateVisualExplainer(criterionId?)
+ *   write_on_board            -> writeOnBoard(note)
  */
 export interface WorkspaceActions {
   /** Snapshot of the whiteboard, or null when it is empty. */
@@ -68,6 +70,8 @@ export interface WorkspaceActions {
   getReport: () => GapReport | null;
   /** fal image for a criterion that lost marks (default: the report's primary gap). */
   generateVisualExplainer: (criterionId?: string) => Promise<VisualExplainer | null>;
+  /** Sam writes its question on the whiteboard as a card in free space; says whether it was written or queued. */
+  writeOnBoard: (note: NoteInput) => NoteOutcome;
 }
 
 /** A live avatar session returned by AvatarBridge.connect. */

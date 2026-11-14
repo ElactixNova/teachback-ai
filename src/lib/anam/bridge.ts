@@ -7,6 +7,7 @@ import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
 import { boardNote, findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
+import { admitNote, type NoteRefusal } from "@/lib/board/notes";
 import { connectAnam } from "./connect";
 import { TOOL } from "./tools";
 
@@ -32,6 +33,16 @@ export function summariseFinal(scheme: MarkScheme | null, r: GapReport): string 
     .join(" ");
 }
 
+/** Why a note was not written. Plain facts: the avatar must be able to carry on without reading them out. */
+const NOTE_REFUSED: Record<NoteRefusal, string> = {
+  empty: "Nothing was written: the note had no content.",
+  too_long: "Nothing was written: the note was longer than 200 characters. A shorter version of the question fits.",
+  unsafe: "Nothing was written: the note contained a command the board cannot show.",
+  duplicate: "Nothing new was written: the same question is already on the board.",
+  too_soon: "Nothing was written: another note went on the board a few seconds ago.",
+  limit: "Nothing was written: the board already holds the six notes allowed in one session.",
+};
+
 /** A check that finished this recently is reused instead of marking again. */
 const RECENT_CHECK_MS = 20_000;
 
@@ -53,7 +64,21 @@ function registerTools(client: AnamClient, actions: WorkspaceActions): () => voi
     return inflight;
   };
 
+  // Notes written in this session, for the pace, repeat and session limits.
+  const written: { content: string; at: number }[] = [];
+
   const unregister = [
+    client.registerToolCallHandler(TOOL.writeOnBoard, {
+      onStart: async (p) => {
+        const verdict = admitNote({ content: arg(p, "content"), kind: arg(p, "kind") === "text" ? "text" : "math", label: arg(p, "label") || undefined }, written, Date.now());
+        if (!verdict.ok) return NOTE_REFUSED[verdict.reason];
+        written.push({ content: verdict.note.content, at: Date.now() });
+        const out = actions.writeOnBoard(verdict.note);
+        if (out.status === "written") return `The question is now on the board, ${out.where}, where the student can read it.`;
+        if (out.status === "queued") return "The student is drawing right now, so the question is queued and will appear on the board when they pause.";
+        return "The board is not visible right now (the student is looking at their results); the question will appear when they return to the board.";
+      },
+    }),
     client.registerToolCallHandler(TOOL.getRailStatus, {
       onStart: async () => {
         const { markScheme, results, focusIds } = actions.getRail();
