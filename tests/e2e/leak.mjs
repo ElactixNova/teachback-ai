@@ -26,6 +26,16 @@ await page.waitForTimeout(9000);
 if (process.env.TEXT2) { await box.fill(process.env.TEXT2); await box.press("Enter"); await page.waitForTimeout(12000); }
 for (let i = 0; i < 4; i++) { await stroke([[0.1, 0.2 + i * 0.1], [0.5, 0.2 + i * 0.1]]); await page.waitForTimeout(2500); }
 await page.waitForTimeout(30000); // quiet: Sam must say nothing about waiting
+await page.screenshot({ path: path.join(here, "out", "leak.png") });
+if (process.env.CHECK) {
+  // Optional: run a progress check and print what the examiner says about the board (Sam's cards must not count as student work).
+  await page.getByRole("button", { name: /check my progress/i }).click();
+  await page.getByLabel("Gap notes").first().waitFor({ timeout: 90000 }).catch(() => {});
+  const notes = await page.getByLabel("Gap notes").first().innerText().catch(() => "");
+  console.log("---GAP NOTES (board lines)---");
+  console.log(notes.split("\n").filter((l) => /board|sam|question/i.test(l)).join("\n"));
+  await page.screenshot({ path: path.join(here, "out", "leak-notes.png") });
+}
 const lines = await page.evaluate(() => [...document.querySelectorAll("[aria-live=polite] p.rounded-lg")].map((p) => p.textContent));
 console.log(lines.join("\n"));
 await page.getByRole("button", { name: /^end$/i }).click({ timeout: 2000 }).catch(() => {});

@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Eraser, LoaderCircle, Maximize, Minus, Move, Pen, Plus, ScanSearch, Trash2, Undo2 } from "lucide-react";
 import type { WhiteboardSnapshot } from "@/types/session";
+import { MathText } from "./MathText";
 import { NOTE, NOTE_MARGIN, describeSpot, noteLayout, placeNote, plainMath, shiftIntoView, type NoteInput, type NoteOutcome, type Rect } from "@/lib/board/notes";
 
 /**
@@ -36,6 +37,8 @@ interface SamNote extends Rect {
   label: string;
   lines: string[];
   k: number;
+  /** LaTeX source of a math note: the card typesets it with KaTeX (the exported PNG keeps the plain `lines`). */
+  tex?: string;
 }
 
 /** Screen px reserved for the tool dock (top) and the zoom / check controls (bottom): notes stay out of them. */
@@ -247,8 +250,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       const v = viewRef.current;
       const { w, h } = size.current;
       const k = 1 / v.scale;
-      const layout = noteLayout(input.kind === "math" ? plainMath(input.content) : input.content, w);
-      const box = { w: layout.w * k, h: layout.h * k };
+      const isMath = input.kind === "math";
+      const layout = noteLayout(isMath ? plainMath(input.content) : input.content, w);
+      // Typeset maths (fractions, roots) is taller than a plain line: reserve room so the card never overlaps ink.
+      const box = { w: layout.w * k * (isMath ? 1.1 : 1), h: layout.h * k * (isMath ? 1.5 : 1) };
       const viewport: Rect = { x: -v.x * k, y: (DOCK_PX - v.y) * k, w: w * k, h: Math.max(0, h - DOCK_PX - CONTROLS_PX) * k };
       const ink: Rect[] = [];
       for (const s of strokes.current) {
@@ -256,7 +261,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         if (b) ink.push({ x: b.x0, y: b.y0, w: b.x1 - b.x0, h: b.y1 - b.y0 });
       }
       const spot = placeNote(ink, notesRef.current, viewport, box, NOTE_MARGIN * k);
-      const note: SamNote = { id: ++noteId.current, label: input.label ? `Sam · ${input.label}` : "Sam", lines: layout.lines, x: spot.x, y: spot.y, ...box, k };
+      const note: SamNote = { id: ++noteId.current, label: input.label ? `Sam · ${input.label}` : "Sam", lines: layout.lines, x: spot.x, y: spot.y, ...box, k, ...(isMath ? { tex: input.content } : {}) };
       updateNotes((ns) => [...ns, note]);
       if (spot.inView) return { status: "written", where: describeSpot(note, viewport) };
       // Nothing free on screen: glide the board so the note is visible. Stops if the student touches the board.
@@ -669,10 +674,15 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
                   ×
                 </button>
               </div>
-              {/* T19: render with <MathText> here once it lands; the size comes from noteLayout. */}
-              <div className="whitespace-pre" style={{ fontSize: NOTE.font, lineHeight: `${NOTE.line}px` }}>
-                {n.lines.join("\n")}
-              </div>
+              {n.tex ? (
+                <div style={{ fontSize: NOTE.font }}>
+                  <MathText text={`$${n.tex}$`} spoken={n.lines.join(" ")} />
+                </div>
+              ) : (
+                <div className="whitespace-pre" style={{ fontSize: NOTE.font, lineHeight: `${NOTE.line}px` }}>
+                  {n.lines.join("\n")}
+                </div>
+              )}
             </div>
           ))}
         </div>
