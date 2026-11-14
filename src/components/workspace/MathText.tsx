@@ -73,7 +73,10 @@ const requested = new Set<string>();
 const listeners = new Set<() => void>();
 const queue: string[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
+// Matches POST /api/to-latex limits (src/lib/math/tolatex.ts: MAX_TEXTS 20, MAX_TEXT_CHARS 600). One over-long
+// text would fail the whole batch with a 400, so longer lines are never sent.
 const BATCH = 20;
+const MAX_CHARS = 600;
 
 function notify() {
   for (const l of listeners) l();
@@ -90,8 +93,10 @@ async function flush() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ texts: batch }),
     });
-    const data = (await res.json().catch(() => null)) as { latex?: unknown } | null;
-    const out = res.ok && Array.isArray(data?.latex) ? (data.latex as unknown[]) : [];
+    // The route answers { texts: string[] } (same order); accept { latex } too.
+    const data = (await res.json().catch(() => null)) as { texts?: unknown; latex?: unknown } | null;
+    const list = data?.texts ?? data?.latex;
+    const out = res.ok && Array.isArray(list) ? (list as unknown[]) : [];
     batch.forEach((t, i) => {
       const l = out[i];
       latexCache.set(t, typeof l === "string" && l !== t && hasMath(l) ? l : null);
@@ -104,7 +109,7 @@ async function flush() {
 
 /** Ask for a LaTeX version of a spoken line, at most once per distinct text, batched. */
 function requestLatex(text: string) {
-  if (requested.has(text)) return;
+  if (requested.has(text) || text.length > MAX_CHARS) return;
   requested.add(text);
   queue.push(text);
   if (!timer) timer = setTimeout(flush, 300);
