@@ -1,0 +1,13 @@
+{
+  "name": "teachback-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Headless end-to-end smoke test for TeachBack (kept out of the app's package.json).",
+  "scripts": {
+    "fixtures": "node ../../fixtures/render-fixtures.mjs",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.65.1"
+  }
+}
