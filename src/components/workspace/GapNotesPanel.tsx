@@ -5,6 +5,7 @@ import type { Criterion, CriterionResult, GapReport, MarkScheme } from "@/types/
 import { MarksPill, SEVERITY, ScoreRing, SeverityTag, SourceChip, StatusIcon, WORST_FIRST, displayStatus, verdict } from "./status";
 import type { VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
+import { AskChip, MissedCallout } from "./callouts";
 
 export type CheckState = { status: "idle" } | { status: "checking" } | { status: "error"; error: string };
 
@@ -84,6 +85,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
         <div className="min-w-0 flex-1">
           {primary && <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Biggest gap</p>}
           <h3 className="font-semibold leading-snug">{c.title}</h3>
+          <AskChip ask={c.ask} className="mt-1" />
           {s === "parked" && <p className="text-xs font-semibold text-parked">Parked after 2 tries</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -142,8 +144,9 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
       </div>
 
       {primary && (
-        <div className="mt-4">
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(200px,38%)] lg:items-start">
           <VisualSlot state={visual} alt={`Diagram: ${c.title}`} onRetry={onRetryVisual} />
+          <MissedCallout criterion={c} result={r} />
         </div>
       )}
     </article>

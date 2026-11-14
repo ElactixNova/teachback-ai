@@ -53,6 +53,18 @@ export function Workspace() {
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const [boardEmpty, setBoardEmpty] = useState(true);
   const [boardVersion, setBoardVersion] = useState(0);
+  // "Sam is waiting while you write": true while strokes keep coming, false 4s after the last one.
+  const [writing, setWriting] = useState(false);
+  const writingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onBoardChange = useCallback((version: number) => {
+    setBoardVersion(version);
+    setWriting(true);
+    if (writingTimer.current) clearTimeout(writingTimer.current);
+    writingTimer.current = setTimeout(() => setWriting(false), 4000);
+  }, []);
+  useEffect(() => () => {
+    if (writingTimer.current) clearTimeout(writingTimer.current);
+  }, []);
   const sessionStart = useRef<number | null>(null);
 
   const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>("idle");
@@ -147,18 +159,23 @@ export function Workspace() {
 
   // ---- Live marking (T11 decides when; we own the results) ---------------------------------------
   const studentLines = transcript.filter((l) => l.speaker === "student").length;
+  // Each final check bumps the epoch; a live result from a request sent before it is dropped (it would overwrite the final marks).
+  const finalEpoch = useRef(0);
+  const liveReqEpoch = useRef(new WeakMap<object, number>());
   const live = useLiveAnalysis({
-    // Stop live marking the moment a final check starts: disabling aborts the in-flight request, so a late
-    // live result cannot overwrite what the final marking is about to show.
     enabled: !!markScheme && view === "board" && check.status !== "checking",
     getInput: () => {
       const { markScheme: s, transcript: lines } = latest.current;
       if (!s) return null;
-      return { markScheme: s, transcript: timed(lines), whiteboardBase64: boardRef.current?.exportSnapshotBase64() ?? undefined, mode: "live" };
+      const req = { markScheme: s, transcript: timed(lines), whiteboardBase64: boardRef.current?.exportSnapshotBase64() ?? undefined, mode: "live" as const };
+      // useLiveAnalysis copies the request, so key on its transcript array (passed through by reference).
+      liveReqEpoch.current.set(req.transcript, finalEpoch.current);
+      return req;
     },
     onResults: (incoming, req) => {
       const s = latest.current.markScheme;
       if (!s || req.markScheme !== s || latest.current.view !== "board") return;
+      if (liveReqEpoch.current.get(req.transcript) !== finalEpoch.current) return;
       updateResults((prev) => mergeLiveResults(s, prev, incoming, req.transcript));
     },
     changeKey: `${studentLines}:${boardVersion}`,
@@ -232,6 +249,7 @@ export function Workspace() {
       return Promise.resolve(null);
     }
     setCheck({ status: "checking" });
+    finalEpoch.current++;
     const promise = (async () => {
       try {
         const raw = await analyzeFinal({ markScheme: s, transcript: timed(lines), whiteboardBase64: board });
@@ -455,7 +473,7 @@ export function Workspace() {
                 checking={checking}
                 onSnapAndCheck={() => void checkExplanation()}
                 onEmptyChange={setBoardEmpty}
-                onChange={setBoardVersion}
+                onChange={onBoardChange}
               />
             }
             notes={
@@ -496,6 +514,7 @@ export function Workspace() {
           <AvatarPanel
             status={avatarStatus}
             statusDetail={avatarDetail}
+            waiting={writing}
             cue={cue}
             transcript={transcript}
             onConnect={() => void connect()}

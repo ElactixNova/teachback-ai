@@ -7,6 +7,7 @@ import { gapsOf, VisualSlot, type Gap } from "./GapNotesPanel";
 import { MarksPill, STATUS_LABEL, SourceChip, StatusIcon, displayStatus } from "./status";
 import type { Async, VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
+import { MissedCallout } from "./callouts";
 
 /** At most this many fal images on the end screen (one per gap, worst first). */
 export const MAX_LEARN_IMAGES = 4;
@@ -152,6 +153,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                         Teach it back <ArrowRight className="h-4 w-4" />
                       </button>
                     </div>
+                    <MissedCallout criterion={g.criterion} result={g.result} className="mx-3 mb-3" />
                   </article>
                 );
               })}
