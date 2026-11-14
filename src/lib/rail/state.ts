@@ -200,7 +200,18 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
   const active = liveFocusId(results);
   const open = (r: CriterionResult) => r.status !== "full" && r.status !== "parked";
   const focus = focusIds.map((id) => results.find((r) => r.criterionId === id)).filter((r): r is CriterionResult => !!r && open(r));
-  const nextUp = focus[0] ?? results.find((r) => r.status === "not_covered") ?? results.find((r) => open(r) && r.status !== "in_progress");
+  // One follow-up on the point they last answered only partly, before a new point: moving on too early loses marks.
+  const retry = focus.length
+    ? undefined
+    : results
+        .filter((r) => LOST.includes(r.status) && r.attempts < MAX_ATTEMPTS)
+        .sort((a, b) => toSeconds(b.evidence?.timestamp) - toSeconds(a.evidence?.timestamp))[0];
+  const nextUp = focus[0] ?? results.find((r) => r.status === "not_covered") ?? results.find((r) => open(r) && r.status !== "in_progress" && r !== retry);
+  const question = (id: string) => {
+    const c = scheme.criteria.find((x) => x.id === id);
+    const board = c?.ask === "write" || c?.ask === "draw" ? ` Ask them to ${c.ask} it on the board.` : "";
+    return c?.probe ? ` Use this question, in your own words: "${c.probe}"${board}` : board;
+  };
   const board = boardNote(scheme, results);
   return [
     `Rail: ${awarded}/${total} marks so far.`,
@@ -211,9 +222,14 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
     `Not covered yet: ${list(pick(["not_covered"]))}.`,
     active ? `They are explaining now: ${title(active)}.` : "",
     focus.length ? `They chose to work on: ${focus.map((r) => title(r.criterionId)).join("; ")}.` : "",
+    retry
+      ? `They only partly explained "${title(retry.criterionId)}". Before any new point, react to their answer and ask one follow-up about the part of it that is still unclear to you. Never give the answer.`
+      : "",
     nextUp
-      ? `If they pause, ask one curious question that leads them to "${title(nextUp.criterionId)}". Never give the answer.`
-      : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
+      ? `${retry ? "After that" : "If they pause"}, ask one curious question that leads them to "${title(nextUp.criterionId)}".${question(nextUp.criterionId)} Never give the answer.`
+      : retry
+        ? ""
+        : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
   ]
     .filter(Boolean)
     .join(" ");

@@ -1,5 +1,6 @@
 // Server-only: the ephemeral persona config sent to POST https://api.anam.ai/v1/auth/session-token.
 // Field names verified against https://anam.ai/docs/api-reference/sessions/create-session-token.md
+import type { AskMode } from "@/types/session";
 import { CLIENT_TOOLS, RAIL_TOOLS, TOOL, type AnamClientToolDefinition } from "./tools";
 
 /** Defaults from Anam's docs; override with env vars once we pick a face/voice in Anam Lab. */
@@ -16,8 +17,8 @@ export interface PersonaContext {
   topic?: string;
   /** Short excerpt of the lecture notes so the persona can ask sensible questions. */
   notesExcerpt?: string;
-  /** Mark Scheme Rail: the points to be covered (titles only, never the expected answers). Switches to the rail persona. */
-  criteria?: { id: string; title: string }[];
+  /** Mark Scheme Rail: the points to be covered, with the question that draws each one out (never the expected answers). Switches to the rail persona. */
+  criteria?: { id: string; title: string; probe?: string; ask?: AskMode }[];
 }
 
 export interface AnamPersonaConfig {
@@ -64,12 +65,16 @@ const MAX_CRITERIA = 12;
 export function buildRailSystemPrompt(ctx: PersonaContext): string {
   const topic = ctx.topic?.trim();
   const excerpt = ctx.notesExcerpt?.trim().slice(0, MAX_EXCERPT);
-  const points = (ctx.criteria ?? []).slice(0, MAX_CRITERIA).map((c) => `${c.id}: ${c.title}`).join("; ");
+  const points = (ctx.criteria ?? [])
+    .slice(0, MAX_CRITERIA)
+    .map((c) => `- ${c.id}: ${c.title}.${c.probe ? ` Your question: ${c.probe}` : ""}${c.ask === "write" || c.ask === "draw" ? ` (ask them to ${c.ask} this on the board)` : ""}`)
+    .join("\n");
   return [
     "[ROLE] You are Sam, a bright, friendly student. The user is your teacher: they explain a topic to you out loud and may sketch on a whiteboard. This is the Feynman technique, so they learn by teaching you. An examiner marks their explanation live against a mark scheme shown on their screen.",
     topic ? `[TOPIC] Today they are teaching you: ${topic}.` : "",
-    `[MARK SCHEME] The points they need to cover: ${points}. You know only these titles, not the answers. Never reveal or hint at the answers, never read the list out, and never mention marks while they are teaching.`,
-    "[BEHAVIOUR] Listen more than you talk. Keep replies to one or two short spoken sentences. Ask one simple question at a time, like a curious learner who wants to understand why. Never lecture, never give the correct answer, never correct them directly: if something sounds wrong or vague, say what confuses you and ask them to explain it again. When they pause or finish a point, ask about a point they have not covered yet. Reply in natural speech without lists, markdown or emojis.",
+    `[MARK SCHEME] The points they need to cover, each with the question that draws it out of them:\n${points}\nYou know the points and the questions, not the answers. Never reveal or hint at the answers, never read the list out, and never mention marks while they are teaching.`,
+    "[BEHAVIOUR] Listen more than you talk. Keep replies to one or two short spoken sentences. Every reply has two parts. First react to what they just said, in a few words that show you listened: say the idea back in your own words, or say which part confused you. Then ask one question. Never go straight to a new question without that reaction. Never lecture, never give the correct answer, never correct them directly: if something sounds wrong or vague, say what confuses you and ask them to explain it again. Reply in natural speech without lists, markdown or emojis.",
+    "[QUESTIONS] The examiner gives marks only for specifics, so a broad question like asking what the topic is earns them nothing. When they pause or finish a point, take the next point they have not covered and ask its question from the mark scheme, in your own words but just as specific. When a point says to write or draw it, ask them to put it on the board (for example: can you write that out on the board for me?) and then stay quiet while they do. Before you leave a point, check their answer against your question: if they answered only part of it or it was unclear, ask one follow-up about that same point first. Move on once they have answered the follow-up, or when a rail note says the point is fully explained.",
     PERSISTENCE +
       ` After the second try on a point that still does not make sense, call ${TOOL.parkCriterion} with that point, say warmly that you will park it for the report, and move on.`,
     "[BOARD] The student often writes or draws while they think. Never interrupt while they are writing or drawing: if they say they are writing, drawing, working it out or give you a moment, say nothing until they speak again. Do not fill silences, and wait a few seconds after they stop talking before you reply. Whatever is on the board counts as part of their answer: private rail notes tell you what is written or drawn there, so never ask them to say aloud something that is already on the board; at most, ask what a specific part means to them.",

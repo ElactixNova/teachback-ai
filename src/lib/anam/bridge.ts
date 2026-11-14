@@ -140,7 +140,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         context: {
           topic: ctx.topic ?? markScheme?.topic,
           notesExcerpt: ctx.notesExcerpt,
-          criteria: markScheme?.criteria.map((c) => ({ id: c.id, title: c.title })),
+          criteria: markScheme?.criteria.map((c) => ({ id: c.id, title: c.title, probe: c.probe, ask: c.ask })),
         },
         registerTools: (c) => {
           const unregister = registerTools(c, actions);

@@ -160,3 +160,15 @@ test("board note: first sighting fires, rewording the same drawing does not, a n
   assert.equal(railChangeNote(scheme, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced."), withBoard("The board shows CO2 + H2O -> C6H12O6 + O2 which is not balanced.")), null);
   assert.ok(railChangeNote(scheme, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced."), withBoard("A leaf diagram with arrows showing sunlight and chloroplasts.")));
 });
+
+test("status text: the next point's probe and board request; one follow-up on a partly explained point first", () => {
+  const probed = { ...scheme, criteria: [scheme.criteria[0], { ...scheme.criteria[1], probe: "Where in the plant does it happen?", ask: "draw" }] };
+  const fresh = railStatusText(probed, initialRail(probed).results);
+  assert.match(fresh, /If they pause.*leads them to "Inputs and outputs"\. Never give/);
+  const partial = mergeLive(probed, initialRail(probed), [r("c1", "partial", 1, "it uses water", "00:05")]).results;
+  const text = railStatusText(probed, partial);
+  assert.match(text, /only partly explained "Inputs and outputs".*one follow-up.*After that.*"Where it happens"\. Use this question, in your own words: "Where in the plant does it happen\?" Ask them to draw it on the board\./);
+  assert.doesNotMatch(text, /CO2|chloroplasts/); // never the expected answers
+  const parked = parkResult(partial, "c1");
+  assert.doesNotMatch(railStatusText(probed, parked), /only partly explained/);
+});
