@@ -210,3 +210,15 @@ test("said: live merges keep the summary, and the final report's summary wins", 
   const fin = finalizeReport(scheme, report, [withSaid("You said A."), r("c2", "not_covered", 0)]);
   assert.equal(fin.results.find((x) => x.criterionId === "c1").said, "You said A and then B.");
 });
+
+test("rail status always names a next question while a point is open", () => {
+  // Only one open point and it is in progress: Sam must still be told what to ask, never "everything addressed".
+  // (No missing steps listed yet, so neither a follow-up nor a sweep applies: this used to say "Everything has been addressed".)
+  const inProgress = r("c1", "in_progress", 1, "carbon dioxide", "00:10");
+  const text = railStatusText(scheme, [inProgress, r("c2", "full", 2)]);
+  assert.match(text, /Next question: keep going on "Inputs and outputs"/);
+  assert.doesNotMatch(text, /Everything has been addressed/);
+  assert.match(railStatusText(scheme, [r("c1", "full", 3), r("c2", "not_covered", 0)]), /Next question: .*move to "Where it happens"/);
+  assert.match(railStatusText(scheme, [r("c1", "full", 3), r("c2", "full", 2)]), /Everything has been addressed/);
+  assert.doesNotMatch(text, /unsure|not sure/i);
+});
