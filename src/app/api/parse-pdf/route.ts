@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { extractText } from "unpdf";
+import { MAX_CURRICULUM_CHARS, tooLongMessage } from "@/lib/curriculum/limits";
 import type { ApiError, CurriculumContext } from "@/types/session";
 
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -26,6 +27,7 @@ export async function POST(req: Request) {
   const text = extracted.text.trim();
   // shortcut: no OCR, so scanned or handwritten PDFs are rejected; add OCR if real notes need it.
   if (!text) return fail(422, "No text found in that PDF. Scanned notes are not supported, upload a text PDF.");
+  if (text.length > MAX_CURRICULUM_CHARS) return fail(413, tooLongMessage(text.length));
 
   return NextResponse.json<CurriculumContext>({
     title: file.name.replace(/\.pdf$/i, ""),

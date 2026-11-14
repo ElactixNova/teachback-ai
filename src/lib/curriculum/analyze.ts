@@ -24,6 +24,8 @@ Fields:
 - score: 0 to 100 for how well the student understands the topic they explained.
 - summary: two or three sentences on where the student stands.`;
 
+const NO_NOTES = `The student has not uploaded lecture notes for this session, so there is no <lecture_notes> block and the instructions about the notes do not apply. Judge the explanation against well-established knowledge of the subject instead, base each correction on that, and report only gaps you are confident about. Say in the summary that the explanation was checked against general knowledge because no notes were uploaded.`;
+
 const str = { type: "string" } as const;
 const GAP_REPORT_SCHEMA = {
   type: "object",
@@ -79,8 +81,10 @@ export async function analyzeExplanation({ transcript, curriculumText, whiteboar
     fallbacks: "default",
     system: [
       { type: "text", text: INSTRUCTIONS },
-      // Cached: the notes stay the same across every check in a session.
-      { type: "text", text: `<lecture_notes>\n${curriculumText}\n</lecture_notes>`, cache_control: { type: "ephemeral" } },
+      curriculumText
+        ? // Cached: the notes stay the same across every check in a session.
+          { type: "text", text: `<lecture_notes>\n${curriculumText}\n</lecture_notes>`, cache_control: { type: "ephemeral" } }
+        : { type: "text", text: NO_NOTES },
     ],
     messages: [
       {

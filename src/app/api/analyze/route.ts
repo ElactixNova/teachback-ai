@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { analyzeExplanation } from "@/lib/curriculum/analyze";
+import { MAX_CURRICULUM_CHARS, tooLongMessage } from "@/lib/curriculum/limits";
 import type { AnalyzeRequest, ApiError, GapReport } from "@/types/session";
 
 const fail = (status: number, error: string) => NextResponse.json<ApiError>({ error }, { status });
@@ -12,7 +13,8 @@ export async function POST(req: Request) {
   const curriculumText = typeof body?.curriculumText === "string" ? body.curriculumText.trim() : "";
   const whiteboard = typeof body?.whiteboard?.pngBase64 === "string" && body.whiteboard.pngBase64 ? body.whiteboard : undefined;
 
-  if (!curriculumText) return fail(400, "Upload your lecture notes first.");
+  // Notes are optional: without them the explanation is checked against general knowledge of the subject.
+  if (curriculumText.length > MAX_CURRICULUM_CHARS) return fail(413, tooLongMessage(curriculumText.length));
   if (!transcript && !whiteboard) return fail(400, "Explain or draw something first.");
   if (!process.env.ANTHROPIC_API_KEY) return fail(500, "ANTHROPIC_API_KEY is not set on the server.");
 
