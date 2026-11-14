@@ -3,7 +3,7 @@ import type { AnamSessionResponse, ApiError } from "@/types/session";
 import { buildPersonaConfig, type PersonaContext } from "@/lib/anam/persona";
 
 // T2: exchanges ANAM_API_KEY (server-side only) for a short-lived Anam session token.
-// Body (optional JSON): { topic?: string, notesExcerpt?: string } to scope the persona.
+// Body (optional JSON): { topic?, notesExcerpt?, criteria?: {id,title}[] }. With criteria: the Mark Scheme Rail persona + tools.
 const ANAM_API = process.env.ANAM_API_URL || "https://api.anam.ai";
 
 export async function POST(req: Request) {
@@ -19,6 +19,13 @@ export async function POST(req: Request) {
       ctx = {
         topic: typeof body.topic === "string" ? body.topic : undefined,
         notesExcerpt: typeof body.notesExcerpt === "string" ? body.notesExcerpt : undefined,
+        // Mark Scheme Rail: titles only (the persona must not know the expected answers).
+        criteria: Array.isArray(body.criteria)
+          ? body.criteria
+              .filter((c): c is { id: string; title: string } => !!c && typeof c.id === "string" && typeof c.title === "string")
+              .slice(0, 12)
+              .map((c) => ({ id: c.id.slice(0, 20), title: c.title.trim().replace(/\s+/g, " ").slice(0, 120) }))
+          : undefined,
       };
     }
   } catch {
