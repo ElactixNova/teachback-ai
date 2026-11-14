@@ -271,7 +271,10 @@ export function Workspace() {
           )}
           <button
             type="button"
-            onClick={() => void rail.finish()}
+            onClick={() => {
+              // finish() switches to the end view itself, except when it reuses an earlier run (e.g. after Snap & Check).
+              void rail.finish().then((r) => r && rail.setView("end"));
+            }}
             disabled={!markScheme || checking}
             className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white transition hover:bg-accent-strong disabled:opacity-40"
           >
