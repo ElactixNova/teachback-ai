@@ -8,8 +8,8 @@ import { CurriculumUploader } from "./CurriculumUploader";
 import { ReportDrawer } from "./ReportDrawer";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
 import { analyze, generateVisual, visualRequestFor } from "./api";
-// T2: replace with the real Anam bridge from src/lib/anam once it exists (same AvatarBridge interface).
-import { stubAvatarBridge as avatarBridge } from "./avatar-bridge-stub";
+// T2: real Anam bridge (src/lib/anam/bridge.ts).
+import { anamAvatarBridge as avatarBridge } from "@/lib/anam/bridge";
 import {
   ANAM_VIDEO_ID,
   SEVERITY_RANK,
