@@ -22,9 +22,15 @@ export async function POST(req: Request) {
         // Mark Scheme Rail: titles only (the persona must not know the expected answers).
         criteria: Array.isArray(body.criteria)
           ? body.criteria
-              .filter((c): c is { id: string; title: string } => !!c && typeof c.id === "string" && typeof c.title === "string")
+              .filter((c): c is { id: string; title: string; probe?: string; ask?: "say" | "write" | "draw" } => !!c && typeof c.id === "string" && typeof c.title === "string")
               .slice(0, 12)
-              .map((c) => ({ id: c.id.slice(0, 20), title: c.title.trim().replace(/\s+/g, " ").slice(0, 120) }))
+              .map((c) => ({
+                id: c.id.slice(0, 20),
+                title: c.title.trim().replace(/\s+/g, " ").slice(0, 120),
+                // The probe is a question, never an answer (the mark-scheme prompt guarantees that).
+                ...(typeof c.probe === "string" && c.probe.trim() ? { probe: c.probe.trim().replace(/\s+/g, " ").slice(0, 200) } : {}),
+                ...(c.ask === "write" || c.ask === "draw" ? { ask: c.ask } : {}),
+              }))
           : undefined,
       };
     }

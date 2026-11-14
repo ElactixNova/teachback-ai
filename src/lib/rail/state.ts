@@ -202,6 +202,14 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
   const focus = focusIds.map((id) => results.find((r) => r.criterionId === id)).filter((r): r is CriterionResult => !!r && open(r));
   const nextUp = focus[0] ?? results.find((r) => r.status === "not_covered") ?? results.find((r) => open(r) && r.status !== "in_progress");
   const board = boardNote(scheme, results);
+  // Before moving on, probe the point they just explained if part of it is still missing (the active
+  // point first, else any other partly explained one that has not used its two tries).
+  const partly = (r: CriterionResult) => open(r) && r.missingSteps.length > 0 && r.attempts < 2 && r.status !== "not_covered" && (r.awarded > 0 || r.status === "in_progress");
+  const followUp = results.find((r) => r.criterionId === active && partly(r)) ?? results.find(partly);
+  const next = nextUp ? scheme.criteria.find((c) => c.id === nextUp.criterionId) : undefined;
+  const nextAsk = next?.probe
+    ? ` Ask it in your own words, keeping its specifics: "${next.probe}"${next.ask && next.ask !== "say" ? `, and have them ${next.ask} it on the board, then wait quietly` : ""}.`
+    : "";
   return [
     `Rail: ${awarded}/${total} marks so far.`,
     board,
@@ -211,9 +219,13 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
     `Not covered yet: ${list(pick(["not_covered"]))}.`,
     active ? `They are explaining now: ${title(active)}.` : "",
     focus.length ? `They chose to work on: ${focus.map((r) => title(r.criterionId)).join("; ")}.` : "",
+    followUp
+      ? `FIRST, before moving on, follow up on "${title(followUp.criterionId)}": they have not yet made this point: "${followUp.missingSteps[0]}". Ask ONE short curious question that leads them towards it. Never state it. If they cannot, move on.`
+      : "",
     nextUp
-      ? `If they pause, ask one curious question that leads them to "${title(nextUp.criterionId)}". Never give the answer.`
+      ? `${followUp ? "After that" : "If they pause"}, move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
       : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
+    "Start your reply by reacting in a few words to what they just said.",
   ]
     .filter(Boolean)
     .join(" ");
