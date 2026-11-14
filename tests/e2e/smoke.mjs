@@ -186,7 +186,7 @@ try {
   await page.screenshot({ path: path.join(outDir, "4-summary.png") });
 
   if (AVATAR) {
-    const lines = await page.evaluate(() => [...document.querySelectorAll("section p.rounded-2xl")].map((p) => p.textContent));
+    const lines = await page.evaluate(() => [...document.querySelectorAll("[aria-live=polite] p.rounded-lg")].map((p) => p.textContent));
     check("transcript has student and avatar lines", lines.length >= 3, `${lines.length} lines`);
     fs.writeFileSync(path.join(outDir, "transcript.txt"), lines.join("\n"));
   }
