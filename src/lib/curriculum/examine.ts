@@ -34,7 +34,8 @@ Rules:
 - If the student corrected themselves, mark their best final version, but mention the earlier error in \`fix\`.
 - status: full = all marks; partial = some; missed = they addressed the criterion but earned 0; not_covered = never addressed; in_progress = currently being explained (MODE=live only).
 - evidence.quote must be copied verbatim from TRANSCRIPT. Never invent quotes. If there is no relevant quote, omit evidence.
-- boardObservation: describe only what is visibly on the whiteboard, including steps that are missing between lines.
+- boardObservation: describe only what is visibly on the whiteboard, including steps that are missing between lines. Transcribe equations and formulas exactly as written (for example "CO2 + H2O -> C6H12O6 + O2"), do not silently correct them.
+- Check the correctness of anything written, not just its presence. For a chemical equation, count the atoms of every element on each side: if they differ it is NOT balanced, so it earns no mark for a step that needs a balanced or correct equation, and \`fix\` must say which element is unbalanced. The same goes for wrong coefficients, units, signs or arithmetic. A step whose wording is only "states the equation" still needs the equation to be correct. If the handwriting is too unclear to check, say so in boardObservation and do not award the mark.
 - missingSteps: copy them verbatim from \`expected\`.
 - fix: one or two sentences the student could say out loud to earn the missing marks. Don't lecture.
 - primaryGapId: the criterion with the most marks lost (ties: the earliest in the scheme).
@@ -103,6 +104,7 @@ The notes contain page markers like [Page 2]. Use only what the notes say.
 Rules:
 - Write 4 to 7 criteria for the topic. Each criterion is one idea a student must explain, with a short title.
 - \`expected\` lists the 2 to 5 mark-bearing steps for that criterion. Each step is one short, checkable statement of what a student must say or show, and is worth exactly 1 mark. No step may overlap another.
+- When a step is an equation or formula, write the full correct form in the step and say "balanced" or "correct" explicitly, so it can be checked.
 - Base every step on the notes. Do not add outside facts.
 - \`page\` is the [Page N] number where the notes teach that criterion. Never invent a page number.
 - \`label\` is a short section or lecture label from the notes (for example "Lecture 4"), or null.

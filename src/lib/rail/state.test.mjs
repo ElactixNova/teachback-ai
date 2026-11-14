@@ -142,3 +142,13 @@ test("time helpers", () => {
     [{ speaker: "student", text: "hi", t: "01:02" }],
   );
 });
+
+test("the avatar is told what is on the board, so it never asks to repeat it", () => {
+  const before = [r("c1", "partial", 1), r("c2", "not_covered", 0)];
+  const after = [{ ...r("c1", "partial", 1), boardObservation: "CO2 + H2O -> C6H12O6 + O2, not balanced" }, r("c2", "not_covered", 0)];
+  const note = railChangeNote(scheme, before, after);
+  assert.match(note, /On their whiteboard .*never ask them to say aloud.*Inputs and outputs: CO2 \+ H2O/);
+  assert.equal(railChangeNote(scheme, after, after), null);
+  assert.match(railStatusText(scheme, after), /On their whiteboard/);
+  assert.doesNotMatch(railStatusText(scheme, before), /whiteboard/);
+});

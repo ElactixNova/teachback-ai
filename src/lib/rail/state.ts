@@ -167,6 +167,22 @@ export function liveFocusId(results: CriterionResult[]): string | null {
   return results.find((r) => r.status === "in_progress")?.criterionId ?? null;
 }
 
+const MAX_BOARD_CHARS = 600;
+
+/**
+ * What the examiner saw on the whiteboard, so the avatar knows what is already drawn or written.
+ * Empty string when the board has been empty. Truncated: it goes into the avatar's context.
+ */
+function boardNote(scheme: MarkScheme, results: CriterionResult[]): string {
+  const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
+  const seen = results
+    .filter((r) => r.boardObservation?.trim())
+    .map((r) => `${title(r.criterionId)}: ${r.boardObservation!.trim()}`)
+    .join(" | ");
+  if (!seen) return "";
+  return `On their whiteboard (you can see it through the examiner, so never ask them to say aloud what is already written or drawn there): ${seen.slice(0, MAX_BOARD_CHARS)}.`;
+}
+
 /** What the avatar gets back from get_rail_status: short, factual, no answers. */
 export function railStatusText(scheme: MarkScheme, results: CriterionResult[], focusIds: string[] = []): string {
   const { awarded, total } = railScore(scheme, results);
@@ -177,8 +193,10 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
   const open = (r: CriterionResult) => r.status !== "full" && r.status !== "parked";
   const focus = focusIds.map((id) => results.find((r) => r.criterionId === id)).filter((r): r is CriterionResult => !!r && open(r));
   const nextUp = focus[0] ?? results.find((r) => r.status === "not_covered") ?? results.find((r) => open(r) && r.status !== "in_progress");
+  const board = boardNote(scheme, results);
   return [
     `Rail: ${awarded}/${total} marks so far.`,
+    board,
     `Fully explained: ${list(pick(["full"]))}.`,
     `Partly explained: ${list(pick(["partial", "missed"]))}.`,
     `Parked (do not ask about these again): ${list(pick(["parked"]))}.`,
@@ -202,7 +220,8 @@ export function railChangeNote(scheme: MarkScheme, before: CriterionResult[], af
   const was = (id: string) => before.find((r) => r.criterionId === id)?.status;
   const nowFull = after.filter((r) => r.status === "full" && was(r.criterionId) !== "full").map((r) => title(r.criterionId));
   const nowParked = after.filter((r) => r.status === "parked" && was(r.criterionId) !== "parked").map((r) => title(r.criterionId));
-  if (!nowFull.length && !nowParked.length) return null;
+  const boardChanged = after.some((r) => r.boardObservation?.trim() && r.boardObservation !== before.find((b) => b.criterionId === r.criterionId)?.boardObservation);
+  if (!nowFull.length && !nowParked.length && !boardChanged) return null;
   return [
     "[RAIL UPDATE, private, do not read out]",
     nowFull.length ? `Now fully explained: ${nowFull.join("; ")}. Do not ask about these again.` : "",

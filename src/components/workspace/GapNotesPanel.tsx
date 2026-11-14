@@ -4,6 +4,7 @@ import { ArrowLeft, CircleCheck, ImageOff, LoaderCircle, RefreshCw, Sparkles, Sq
 import type { Criterion, CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import { MarksPill, SourceChip, StatusIcon, WORST_FIRST, displayStatus } from "./status";
 import type { VisualState } from "./types";
+import { ZoomableImage } from "./ZoomableImage";
 
 export type CheckState = { status: "idle" } | { status: "checking" } | { status: "error"; error: string };
 
@@ -67,8 +68,7 @@ export function VisualSlot({ state, alt, onRetry, compact }: { state: VisualStat
   return v.kind === "video" ? (
     <video src={v.url} controls autoPlay muted loop playsInline className="w-full rounded-xl border border-line bg-black" />
   ) : (
-    // eslint-disable-next-line @next/next/no-img-element -- remote fal URL, not worth next/image config
-    <img src={v.url} alt={alt} className="max-h-[60vh] w-full rounded-xl border border-line bg-white object-contain" />
+    <ZoomableImage src={v.url} alt={alt} className="max-h-[60vh] w-full rounded-xl border border-line bg-white object-contain" />
   );
 }
 
