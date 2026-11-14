@@ -30,6 +30,7 @@ export interface AnamPersonaConfig {
   maxSessionLengthSeconds: number;
   initialMessage: string;
   directorNotes: { presetStyle: "warm"; expressivity: number };
+  voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: number; silenceBeforeSessionEndSeconds: number };
   tools: AnamClientToolDefinition[];
 }
 
@@ -103,6 +104,10 @@ export function buildPersonaConfig(ctx: PersonaContext = {}): AnamPersonaConfig 
       ? `[happy] Hi! I'm ready to learn about ${ctx.topic}. Teach me, I'm all ears.`
       : "[happy] Hi! I'm Sam, your student today. What are you going to teach me?",
     directorNotes: { presetStyle: "warm", expressivity: 0.6 },
+    // https://anam.ai/docs/personas/session/voice-detection.md. By default Anam makes the persona prompt a
+    // user who is quiet for 15 s and ends the session after 60 s of silence; a student writing on the
+    // board is quiet for longer than both. 0 = never prompt; 300 = five quiet minutes before the session ends.
+    voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: 0, silenceBeforeSessionEndSeconds: 300 },
     tools: rail ? RAIL_TOOLS : CLIENT_TOOLS,
   };
 }
