@@ -210,7 +210,12 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
   const active = liveFocusId(results);
   const open = (r: CriterionResult) => r.status !== "full" && r.status !== "parked";
   const focus = focusIds.map((id) => results.find((r) => r.criterionId === id)).filter((r): r is CriterionResult => !!r && open(r));
-  const nextUp = focus[0] ?? results.find((r) => r.status === "not_covered") ?? results.find((r) => open(r) && r.status !== "in_progress");
+  // Always name one point to ask about while any is open (never leave Sam without a next question).
+  const nextUp =
+    focus[0] ??
+    results.find((r) => r.status === "not_covered") ??
+    results.find((r) => open(r) && r.status !== "in_progress") ??
+    results.find(open);
   const board = boardNote(scheme, results);
   // Before moving on, probe the point they just explained if part of it is still missing (the active
   // point first, else any other partly explained one that has not used its two tries).
@@ -241,8 +246,10 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
       : "",
     sweep.length
       ? ""
+      : nextUp && nextUp.criterionId === active
+      ? `Next question: keep going on "${title(nextUp.criterionId)}" with one curious question about what they have not explained yet.${nextAsk} Never give the answer.`
       : nextUp
-      ? `${followUp ? "Only in a LATER turn, once that follow-up is answered or given up" : "If they pause"}, move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
+      ? `Next question: ${followUp ? "only in a LATER turn, once that follow-up is answered or given up, " : "when they have finished their answer, "}move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
       : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
     "Start your reply by reacting in a few words to what they just said.",
   ]
