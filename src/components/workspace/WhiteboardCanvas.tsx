@@ -127,7 +127,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
 
   const [tool, setTool] = useState<Tool>("pen");
   const [ink, setInk] = useState(INKS[0].value);
-  const [penWidth, setPenWidth] = useState(3);
+  const [penWidth, setPenWidth] = useState(4); // one of the three width buttons (2, 4, 7), so one is shown as selected
   const [count, setCount] = useState(0); // committed strokes, drives UI state
   const [canUndo, setCanUndo] = useState(false);
   const [version, setVersion] = useState(0); // bumps on every committed change
@@ -485,7 +485,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         )}
 
         {/* Tool Dock (Figma 29:509): floating pill, top centre. */}
-        <div className="absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-full border border-line bg-card/95 px-2 py-1 shadow-[var(--shadow-1)]" role="toolbar" aria-label="Whiteboard tools">
+        {/* Uniform 4px padding: the end buttons (h-9, rounded-full) sit concentric with the pill's rounded ends. */}
+        <div className="absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-full border border-line bg-card/95 p-1 shadow-[var(--shadow-1)]" role="toolbar" aria-label="Whiteboard tools">
           <button type="button" className={toolBtn(tool === "pen")} onClick={() => setTool("pen")} title="Pen (P)" aria-label="Pen" aria-pressed={tool === "pen"}>
             <Pen className="h-4 w-4" />
           </button>
