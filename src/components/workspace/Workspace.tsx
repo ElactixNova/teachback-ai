@@ -200,14 +200,16 @@ export function Workspace() {
         </div>
       </header>
 
-      {hint && (
+      {/* The hint disappears as soon as there is something to check. */}
+      {hint && transcript.length === 0 && boardEmpty && (
         <div className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-900" role="status">
           {hint}
         </div>
       )}
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[minmax(340px,2fr)_3fr] lg:overflow-hidden sm:p-6">
-        <div className="flex min-h-0 flex-col gap-3">
+      {/* Phones: one scrolling column. lg+: fixed-height split screen. */}
+      <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6 lg:grid lg:grid-cols-[minmax(340px,2fr)_3fr] lg:overflow-hidden">
+        <div className="flex shrink-0 flex-col gap-3 lg:min-h-0 lg:shrink">
           <CurriculumUploader curriculum={curriculum} onChange={setCurriculum} />
           <AvatarPanel
             status={avatarStatus}
@@ -219,7 +221,7 @@ export function Workspace() {
             onTypedLine={(text) => handlers.onTranscript("student", text)}
           />
         </div>
-        <div className="min-h-[420px] lg:min-h-0">
+        <div className="h-[480px] shrink-0 lg:h-auto lg:min-h-0 lg:shrink">
           <WhiteboardCanvas
             ref={boardRef}
             checking={checkStatus === "checking"}

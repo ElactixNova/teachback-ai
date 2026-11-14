@@ -45,7 +45,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Avatar stage */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-stone-900 shadow-sm">
+      <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-2xl bg-stone-900 shadow-sm">
         <video
           id={ANAM_VIDEO_ID}
           autoPlay
@@ -55,7 +55,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
 
         {!live && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-stone-800 text-3xl">🧑‍🎓</div>
+            <div className="hidden h-16 w-16 items-center justify-center rounded-full bg-stone-800 text-3xl sm:flex">🧑‍🎓</div>
             <p className="max-w-xs text-sm text-stone-300">
               {status === "connecting"
                 ? "Waking up your student…"
@@ -114,7 +114,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
       </div>
 
       {/* Transcript */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+      <div className="flex min-h-72 flex-1 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm lg:min-h-0">
         <div className="flex items-center justify-between border-b border-stone-200 px-4 py-2">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-500">Transcript</h2>
           <span className="text-xs text-stone-400">{transcript.length} lines</span>
