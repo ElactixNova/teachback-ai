@@ -78,7 +78,16 @@ export interface Criterion {
   expected: string[];
   marks: number;
   source: { page: number; label?: string };
+  /**
+   * The question Sam asks to draw this criterion out of the student: specific to the steps in `expected`
+   * but never containing the answer (e.g. "Can you write the balanced symbol equation for photosynthesis?").
+   */
+  probe?: string;
+  /** How the student best shows this criterion: say it, write it on the board (equations, formulas) or draw it. */
+  ask?: AskMode;
 }
+
+export type AskMode = "say" | "write" | "draw";
 
 export interface MarkScheme {
   topic: string;

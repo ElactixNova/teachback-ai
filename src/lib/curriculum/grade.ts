@@ -1,7 +1,7 @@
 // Pure post-processing of the examiner's output (T9). No SDK imports so it can be unit-tested.
 // The model proposes marks; this code enforces what a schema cannot: marks within bounds, verbatim
 // quotes and missing steps, consistent statuses, and a deterministic total and primary gap.
-import type { AnalyzeMode, Criterion, CriterionResult, CriterionStatus, GapReport, MarkScheme, StudyStep, TimedLine } from "@/types/session";
+import type { AnalyzeMode, AskMode, Criterion, CriterionResult, CriterionStatus, GapReport, MarkScheme, StudyStep, TimedLine } from "@/types/session";
 
 export interface RawResult {
   criterionId: string;
@@ -137,7 +137,7 @@ export function buildReport(scheme: MarkScheme, results: CriterionResult[], rawP
 
 /** Builds a MarkScheme from the model's draft: ids, marks (1 per step), totals and the page range are computed here. */
 export function buildMarkScheme(
-  draft: { topic: string; criteria: { title: string; expected: string[]; page: number; label: string | null }[] },
+  draft: { topic: string; criteria: { title: string; expected: string[]; page: number; label: string | null; probe?: string | null; ask?: AskMode | null }[] },
   meta: { sourceFile: string; topic: string; maxPage: number },
 ): MarkScheme {
   const criteria: Criterion[] = draft.criteria
@@ -152,6 +152,8 @@ export function buildMarkScheme(
         expected: c.expected,
         marks: c.expected.length,
         source: { page, ...(c.label ? { label: c.label } : {}) },
+        ...(c.probe?.trim() ? { probe: c.probe.trim() } : {}),
+        ask: c.ask === "write" || c.ask === "draw" ? c.ask : ("say" as AskMode),
       };
     });
   const pages = criteria.map((c) => c.source.page);

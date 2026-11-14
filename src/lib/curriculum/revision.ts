@@ -26,6 +26,12 @@ For each listed criterion write:
 - steps: 3 to 6 short numbered-style steps (plain sentences, no numbering) that correct what was missed. Base every step on the lecture notes only; do not add outside facts.
 - oneLiner: one sentence summarising the idea.
 - diagram: prefer an inline SVG for maths, equations, flows and labelled diagrams (diagramKind "svg"): a self-contained <svg> with a viewBox of 0 0 600 340, white background rect, sharp text of at least 16px, labelled arrows, a few colours, no scripts, no external images or fonts, under 6000 characters. If an SVG does not fit the concept (for example a physical scene), use diagramKind "image" with a concise imagePrompt for an image model, and set svg to null. When diagramKind is "svg", set imagePrompt to null.
+The diagram must be about THIS student's answer, not a generic textbook figure. For each criterion you also get earnedSteps (what they got right), missingSteps (what they left out), studentSaid (their exact words, may be wrong) and onTheirBoard (what the examiner saw on their whiteboard).
+- Show earnedSteps in a calm colour with a tick, and draw missingSteps in a strong highlight colour with the tag "You missed this" so the gap jumps out.
+- If studentSaid or onTheirBoard contains a mistake (a wrong formula, an unbalanced equation, a wrong place or order), show it small and crossed out as "You said: ..." next to the corrected version.
+- Fill the whole 600x340 canvas: a few big shapes, labels at 18px or more, a 24px title. No tiny text; if it does not fit, cut detail, not font size.
+- For an image prompt, describe the correct figure and say which parts must be highlighted as the missing ones.
+- The first step of "steps" must name the specific thing they missed or got wrong, in plain words addressed to the student ("You left out...", "You wrote ... but ...").
 Return one note per listed criterion, using its criterionId. JSON only.`;
 
 export async function writeRevisionNotes(scheme: MarkScheme, report: GapReport, curriculumText: string): Promise<RevisionNote[]> {
@@ -43,8 +49,11 @@ export async function writeRevisionNotes(scheme: MarkScheme, report: GapReport, 
           criterionId: criterion.id,
           title: criterion.title,
           expected: criterion.expected,
+          earnedSteps: criterion.expected.filter((s) => !result.missingSteps.includes(s)),
           missingSteps: result.missingSteps,
           studentSaid: result.evidence?.quote ?? null,
+          onTheirBoard: result.boardObservation ?? null,
+          examinerFix: result.fix ?? null,
           sourcePage: criterion.source.page,
         })),
       ),
