@@ -1,6 +1,7 @@
 // Revision notes for the end screen (T9): one note per criterion that lost marks, grounded in the lecture text.
 import { z } from "zod";
-import type { Criterion, CriterionResult, GapReport, MarkScheme, RevisionNote } from "@/types/session";
+import type { GapReport, MarkScheme, RevisionNote } from "@/types/session";
+import { gapsWorstFirst, safeSvg } from "./gaps";
 import { LIVE_MODEL, generateJson } from "./llm";
 
 /** Notes use the faster model: the end screen should appear in about 10-15s. */
@@ -26,27 +27,6 @@ For each listed criterion write:
 - oneLiner: one sentence summarising the idea.
 - diagram: prefer an inline SVG for maths, equations, flows and labelled diagrams (diagramKind "svg"): a self-contained <svg> with a viewBox of 0 0 600 340, white background rect, sharp text of at least 16px, labelled arrows, a few colours, no scripts, no external images or fonts, under 6000 characters. If an SVG does not fit the concept (for example a physical scene), use diagramKind "image" with a concise imagePrompt for an image model, and set svg to null. When diagramKind is "svg", set imagePrompt to null.
 Return one note per listed criterion, using its criterionId. JSON only.`;
-
-const BAD_SVG = /<script|<foreignObject|\son\w+\s*=|javascript:|<iframe|<image|<use|xlink:href|href\s*=\s*["'](?!#)/i;
-
-/** An SVG we are willing to ship to the browser; anything else falls back to an image prompt. */
-export function safeSvg(svg: string | null): string | null {
-  if (!svg) return null;
-  const s = svg.trim();
-  if (!/^<svg[\s>]/i.test(s) || !/<\/svg>\s*$/i.test(s)) return null;
-  if (s.length > 20_000 || BAD_SVG.test(s)) return null;
-  return s;
-}
-
-/** Criteria that lost marks (partial, missed or parked), worst first; ties keep mark-scheme order. */
-export function gapsWorstFirst(scheme: MarkScheme, results: CriterionResult[]): { criterion: Criterion; result: CriterionResult }[] {
-  return scheme.criteria
-    .map((criterion) => ({ criterion, result: results.find((r) => r.criterionId === criterion.id) }))
-    .filter((x): x is { criterion: Criterion; result: CriterionResult } => !!x.result && x.result.status !== "not_covered" && x.criterion.marks - x.result.awarded > 0)
-    .map((x, i) => ({ ...x, i, lost: x.criterion.marks - x.result.awarded }))
-    .sort((a, b) => b.lost - a.lost || a.i - b.i)
-    .map(({ criterion, result }) => ({ criterion, result }));
-}
 
 export async function writeRevisionNotes(scheme: MarkScheme, report: GapReport, curriculumText: string): Promise<RevisionNote[]> {
   const gaps = gapsWorstFirst(scheme, report.results);

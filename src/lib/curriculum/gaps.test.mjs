@@ -1,7 +1,7 @@
-// Run: node --test src/lib/curriculum/revision.test.mjs
+// Run: node --test src/lib/curriculum/gaps.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { gapsWorstFirst, safeSvg } from "./revision.ts";
+import { gapsWorstFirst, safeSvg } from "./gaps.ts";
 
 test("safeSvg accepts a plain svg and rejects script, handlers, external refs and non-svg", () => {
   assert.ok(safeSvg('<svg viewBox="0 0 600 340"><rect width="600" height="340" fill="#fff"/><text x="10" y="30">ok</text></svg>'));
