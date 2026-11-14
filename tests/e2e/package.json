@@ -6,7 +6,8 @@
   "scripts": {
     "fixtures": "node ../../fixtures/render-fixtures.mjs",
     "smoke": "node smoke.mjs",
-    "board-notes": "node board-notes.mjs"
+    "board-notes": "node board-notes.mjs",
+    "leak": "node leak.mjs"
   },
   "dependencies": {
     "playwright-core": "1.65.1"
