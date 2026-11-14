@@ -449,7 +449,7 @@ export function Workspace() {
             className="action inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-card px-4 text-sm font-semibold text-ink transition hover:bg-accent-soft disabled:opacity-40"
           >
             {checking ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Flag className="h-4 w-4" />}
-            <span className="hidden sm:inline">Finish &amp; get report</span>
+            <span className="hidden sm:inline">Finish &amp; final report</span>
             <span className="sm:hidden">Finish</span>
           </button>
         </div>

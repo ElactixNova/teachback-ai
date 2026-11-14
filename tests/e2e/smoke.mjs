@@ -140,7 +140,7 @@ try {
       await page.waitForTimeout(AVATAR ? 4000 : 300);
     }
     check("live marking ran while teaching", await waitApi("/api/analyze", 200, 60000, "live"));
-    await page.getByRole("button", { name: /snap & check/i }).click();
+    await page.getByRole("button", { name: /check my progress/i }).click();
   } else {
     log("waiting for the spoken explanation and the avatar's open_gap_report tool call…");
   }

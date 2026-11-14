@@ -58,11 +58,11 @@ export interface WorkspaceActions {
   getRail: () => RailSnapshot;
   /** Park a criterion (stop probing it; it is revisited on the end screen). No-op for unknown ids. */
   parkCriterion: (criterionId: string) => void;
-  /** Snap & Check: final marking (mode "final"), then show the gap notes in the centre column. */
+  /** "Check my progress" (was Snap & Check): final marking (mode "final"), then show the gap notes in the centre column. */
   checkExplanation: () => Promise<GapReport | null>;
   /** Show the gap notes without re-marking (no-op when there is no report). */
   openGapReport: () => void;
-  /** "Finish & get report": final marking, then the end screen (revision notes, images). */
+  /** "Finish & final report": final marking, then the end screen (revision notes, images). */
   finishSession: () => Promise<GapReport | null>;
   /** The final report currently shown, or null. */
   getReport: () => GapReport | null;
