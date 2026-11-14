@@ -1,5 +1,16 @@
 // Thin typed fetch helpers for the workspace UI. All keys stay in the server routes.
-import type { ApiError, CurriculumContext, MarkScheme, MarkSchemeRequest } from "@/types/session";
+import type {
+  AnalyzeRequest,
+  ApiError,
+  CurriculumContext,
+  GapReport,
+  MarkScheme,
+  MarkSchemeRequest,
+  RevisionNote,
+  RevisionNotesRequest,
+  VisualExplainer,
+  VisualRequest,
+} from "@/types/session";
 
 async function readJson<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => null)) as T | ApiError | null;
@@ -28,6 +39,12 @@ export async function parsePdf(file: File): Promise<CurriculumContext> {
 }
 
 export const fetchMarkScheme = (req: MarkSchemeRequest) => postJson<MarkScheme>("/api/mark-scheme", req);
+
+export const analyzeFinal = (req: Omit<AnalyzeRequest, "mode">) => postJson<GapReport>("/api/analyze", { ...req, mode: "final" });
+
+export const fetchRevisionNotes = (req: RevisionNotesRequest) => postJson<RevisionNote[]>("/api/revision-notes", req);
+
+export const generateVisual = (req: VisualRequest) => postJson<VisualExplainer>("/api/generate-visual", req);
 
 /** SVG markup as an <img> source (never inject it into the DOM). */
 export function svgDataUri(svg: string): string {

@@ -126,18 +126,8 @@ export function findCriterion(scheme: MarkScheme, ref: string): MarkScheme["crit
   );
 }
 
-/** Park a criterion on request (the avatar's park_criterion tool). Full criteria are left alone. */
-export function parkCriterion(scheme: MarkScheme, state: RailState, id: string): RailState {
-  const c = scheme.criteria.find((x) => x.id === id);
-  if (!c) return state;
-  const results = state.results.map((r) =>
-    r.criterionId === id && r.status !== "full" ? { ...r, parked: true, status: "parked" as const, attempts: Math.max(r.attempts, 1) } : r,
-  );
-  return { ...state, results, activeId: state.activeId === id ? null : state.activeId };
-}
-
-export function railScore(scheme: MarkScheme, state: RailState): { awarded: number; total: number } {
-  return { awarded: state.results.reduce((n, r) => n + r.awarded, 0), total: scheme.totalMarks };
+export function railScore(scheme: MarkScheme, results: CriterionResult[]): { awarded: number; total: number } {
+  return { awarded: results.reduce((n, r) => n + r.awarded, 0), total: scheme.totalMarks };
 }
 
 /**
@@ -145,14 +135,15 @@ export function railScore(scheme: MarkScheme, state: RailState): { awarded: numb
  * shows marks the end screen then takes away), carry attempts, and keep parked criteria parked.
  * Totals and the primary gap are recomputed to match.
  */
-export function finalizeReport(scheme: MarkScheme, report: GapReport, state: RailState): GapReport {
+export function finalizeReport(scheme: MarkScheme, report: GapReport, live: CriterionResult[]): GapReport {
   const results = scheme.criteria.map((c) => {
     const fin = report.results.find((r) => r.criterionId === c.id);
-    const live = state.results.find((r) => r.criterionId === c.id);
-    const best = live && (!fin || live.awarded > fin.awarded) ? live : (fin ?? live)!;
-    const parked = !!live?.parked && best.awarded < c.marks;
-    const status: CriterionStatus = best.awarded >= c.marks ? "full" : parked ? "parked" : best.status === "in_progress" ? "partial" : best.status;
-    return { ...best, status, parked, attempts: live?.attempts ?? 0 };
+    const lv = live.find((r) => r.criterionId === c.id);
+    const best = lv && (!fin || lv.awarded > fin.awarded) ? lv : (fin ?? lv)!;
+    const parked = !!lv?.parked && best.awarded < c.marks;
+    const status: CriterionStatus =
+      best.awarded >= c.marks ? "full" : parked ? "parked" : best.status === "in_progress" ? (best.awarded > 0 ? "partial" : "missed") : best.status;
+    return { ...best, status, parked, attempts: lv?.attempts ?? 0 };
   });
 
   let primary: string | null = null;
@@ -171,20 +162,29 @@ export function finalizeReport(scheme: MarkScheme, report: GapReport, state: Rai
   };
 }
 
+/** The criterion being explained right now (status "in_progress"), or null. */
+export function liveFocusId(results: CriterionResult[]): string | null {
+  return results.find((r) => r.status === "in_progress")?.criterionId ?? null;
+}
+
 /** What the avatar gets back from get_rail_status: short, factual, no answers. */
-export function railStatusText(scheme: MarkScheme, state: RailState): string {
-  const { awarded, total } = railScore(scheme, state);
+export function railStatusText(scheme: MarkScheme, results: CriterionResult[], focusIds: string[] = []): string {
+  const { awarded, total } = railScore(scheme, results);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
-  const pick = (s: CriterionStatus[]) => state.results.filter((r) => s.includes(r.status)).map((r) => title(r.criterionId));
+  const pick = (s: CriterionStatus[]) => results.filter((r) => s.includes(r.status)).map((r) => title(r.criterionId));
   const list = (xs: string[]) => (xs.length ? xs.join("; ") : "none");
-  const nextUp = state.results.find((r) => r.status === "not_covered");
+  const active = liveFocusId(results);
+  const open = (r: CriterionResult) => r.status !== "full" && r.status !== "parked";
+  const focus = focusIds.map((id) => results.find((r) => r.criterionId === id)).filter((r): r is CriterionResult => !!r && open(r));
+  const nextUp = focus[0] ?? results.find((r) => r.status === "not_covered") ?? results.find((r) => open(r) && r.status !== "in_progress");
   return [
     `Rail: ${awarded}/${total} marks so far.`,
     `Fully explained: ${list(pick(["full"]))}.`,
     `Partly explained: ${list(pick(["partial", "missed"]))}.`,
     `Parked (do not ask about these again): ${list(pick(["parked"]))}.`,
     `Not covered yet: ${list(pick(["not_covered"]))}.`,
-    state.activeId ? `They are explaining now: ${title(state.activeId)}.` : "",
+    active ? `They are explaining now: ${title(active)}.` : "",
+    focus.length ? `They chose to work on: ${focus.map((r) => title(r.criterionId)).join("; ")}.` : "",
     nextUp
       ? `If they pause, ask one curious question that leads them to "${title(nextUp.criterionId)}". Never give the answer.`
       : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
@@ -194,23 +194,78 @@ export function railStatusText(scheme: MarkScheme, state: RailState): string {
 }
 
 /**
- * A context note for the avatar (Anam addContext) when the rail changed in a way that should steer it:
- * a criterion got full marks or was parked. Null when nothing worth saying changed.
+ * A private context note for the avatar (Anam addContext) when the rail changed in a way that should
+ * steer it: a criterion got full marks or was parked. Null when nothing worth saying changed.
  */
-export function railChangeNote(scheme: MarkScheme, before: RailState, after: RailState): string | null {
+export function railChangeNote(scheme: MarkScheme, before: CriterionResult[], after: CriterionResult[], focusIds: string[] = []): string | null {
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
-  const was = (id: string) => before.results.find((r) => r.criterionId === id)?.status;
-  const nowFull = after.results.filter((r) => r.status === "full" && was(r.criterionId) !== "full").map((r) => title(r.criterionId));
-  const nowParked = after.results.filter((r) => r.status === "parked" && was(r.criterionId) !== "parked").map((r) => title(r.criterionId));
+  const was = (id: string) => before.find((r) => r.criterionId === id)?.status;
+  const nowFull = after.filter((r) => r.status === "full" && was(r.criterionId) !== "full").map((r) => title(r.criterionId));
+  const nowParked = after.filter((r) => r.status === "parked" && was(r.criterionId) !== "parked").map((r) => title(r.criterionId));
   if (!nowFull.length && !nowParked.length) return null;
   return [
     "[RAIL UPDATE, private, do not read out]",
     nowFull.length ? `Now fully explained: ${nowFull.join("; ")}. Do not ask about these again.` : "",
     nowParked.length
-      ? `Parked after two tries: ${nowParked.join("; ")}. Do not ask about these again; if it fits, say warmly that you will park it for the report and move on.`
+      ? `Parked: ${nowParked.join("; ")}. Do not ask about these again; if it fits, say warmly that you will park it for the report and move on.`
       : "",
-    railStatusText(scheme, after),
+    railStatusText(scheme, after, focusIds),
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+// ---- Results-in, results-out API for the workspace (T10 owns the state) ------------------------
+
+/** All criteria not_covered, attempts 0. */
+export function emptyResults(scheme: MarkScheme): CriterionResult[] {
+  return initialRail(scheme).results;
+}
+
+/** The rail with the live focus shown as status "in_progress" (what the UI renders). */
+function present(state: RailState): CriterionResult[] {
+  return state.results.map((r) =>
+    r.criterionId === state.activeId && r.status !== "full" && r.status !== "parked" ? { ...r, status: "in_progress" as const } : r,
+  );
+}
+
+// Per scheme: the internal state behind the last results we returned (attempt history, real statuses).
+const memory = new WeakMap<MarkScheme, { state: RailState; shown: CriterionResult[] }>();
+
+const key = (r: CriterionResult) => `${r.criterionId}|${r.status}|${r.awarded}|${r.parked}|${r.attempts}`;
+
+/** Rebuild the internal state from results the UI may have changed (manual park, reset). */
+function fromResults(scheme: MarkScheme, results: CriterionResult[], old?: RailState): RailState {
+  const merged = emptyResults(scheme).map((b): CriterionResult => {
+    const r = results.find((x) => x.criterionId === b.criterionId);
+    if (!r) return b;
+    if (r.status !== "in_progress") return r;
+    const was = old?.results.find((x) => x.criterionId === b.criterionId);
+    return { ...r, status: was ? was.status : r.awarded > 0 ? "partial" : "not_covered" };
+  });
+  const fresh = results.every((r) => r.status === "not_covered" && r.attempts === 0);
+  return { results: merged, counted: fresh ? {} : (old?.counted ?? {}), activeId: liveFocusId(results) };
+}
+
+/**
+ * Merge one live analysis (POST /api/analyze mode "live") into the rail results.
+ * Marks never go down; attempts count a retry after the avatar spoke; a criterion is parked after its
+ * second failed attempt (and un-parked if it later earns full marks); the criterion being explained
+ * now is returned as "in_progress" (the model's pick, else the open one with the newest student quote).
+ */
+export function mergeLiveResults(scheme: MarkScheme, prev: CriterionResult[], incoming: CriterionResult[], transcript: TimedLine[]): CriterionResult[] {
+  const mem = memory.get(scheme);
+  const unchanged = !!mem && mem.shown.length === prev.length && mem.shown.every((r, i) => key(r) === key(prev[i]));
+  const state = unchanged ? mem!.state : fromResults(scheme, prev, mem?.state);
+  const next = mergeLive(scheme, state, incoming, transcript);
+  const shown = present(next);
+  memory.set(scheme, { state: next, shown });
+  return shown;
+}
+
+/** Park a criterion in a results array (the UI's park button or the avatar's park_criterion). Full ones stay full. */
+export function parkResult(results: CriterionResult[], criterionId: string): CriterionResult[] {
+  return results.map((r) =>
+    r.criterionId === criterionId && r.status !== "full" ? { ...r, parked: true, status: "parked" as const, attempts: Math.max(r.attempts, 1) } : r,
+  );
 }

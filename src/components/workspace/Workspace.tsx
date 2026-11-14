@@ -2,18 +2,31 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Flag, LoaderCircle, Sparkles } from "lucide-react";
-import type { Cue, CurriculumContext, MarkScheme, TimedLine } from "@/types/session";
-import { anamRailBridge } from "@/lib/anam/rail-bridge";
-import type { AnamSession } from "@/lib/anam/connect";
-import { useRail, type Async } from "@/lib/rail/useRail";
+import type { CriterionResult, Cue, CurriculumContext, GapReport, MarkScheme, TimedLine, VisualExplainer } from "@/types/session";
+import { createAnamAvatarBridge } from "@/lib/anam/bridge";
+import { visualRequestForCriterion } from "@/lib/fal/request";
+import { emptyResults, finalizeReport, liveFocusId, mergeLiveResults, parkResult } from "@/lib/rail/state";
+import { useLiveAnalysis } from "@/lib/rail/useLiveAnalysis";
 import { AvatarPanel } from "./AvatarPanel";
 import { CentrePanel } from "./CentrePanel";
 import { GapNotesPanel, gapsOf, type CheckState } from "./GapNotesPanel";
 import { MarkSchemeRail } from "./MarkSchemeRail";
 import { MAX_LEARN_IMAGES, SummaryView } from "./SummaryView";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
-import { fetchMarkScheme } from "./api";
-import { ANAM_VIDEO_ID, type AvatarHandlers, type AvatarStatus, type CentreView, type Speaker, type TranscriptLine } from "./types";
+import { analyzeFinal, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
+import {
+  ANAM_VIDEO_ID,
+  type Async,
+  type AvatarHandlers,
+  type AvatarSession,
+  type AvatarStatus,
+  type RevisionNotesState,
+  type Speaker,
+  type TranscriptLine,
+  type VisualState,
+  type WorkspaceActions,
+  type WorkspaceView,
+} from "./types";
 
 /** How long a Director Notes cue badge stays visible. */
 const CUE_TTL_MS = 4000;
@@ -26,7 +39,7 @@ const mmss = (ms: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
-/** Transcript for the examiner: student and avatar lines only, with their "mm:ss". */
+/** Transcript for the examiner and the avatar: student and avatar lines only, with their "mm:ss". */
 const timed = (lines: TranscriptLine[]): TimedLine[] =>
   lines.filter((l): l is TranscriptLine & { speaker: Speaker } => l.speaker !== "system").map(({ speaker, text, t }) => ({ speaker, text, t }));
 
@@ -36,76 +49,84 @@ export function Workspace() {
   const [curriculum, setCurriculum] = useState<CurriculumContext | null>(null);
   const [sourceFile, setSourceFile] = useState("notes.pdf");
   const [scheme, setScheme] = useState<Async<MarkScheme>>({ status: "idle" });
+  const [results, setResults] = useState<CriterionResult[]>([]);
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const [boardEmpty, setBoardEmpty] = useState(true);
+  const [boardVersion, setBoardVersion] = useState(0);
   const sessionStart = useRef<number | null>(null);
 
   const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>("idle");
   const [avatarDetail, setAvatarDetail] = useState<string | undefined>();
   const [cue, setCue] = useState<Cue | null>(null);
-  const sessionRef = useRef<AnamSession | null>(null);
+  const sessionRef = useRef<AvatarSession | null>(null);
   const cueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** Centre column while in session; the end screen is rail.view === "end". */
-  const [centre, setCentre] = useState<CentreView>("board");
+  const [view, setView] = useState<WorkspaceView>("board");
+  const [focusIds, setFocusIds] = useState<string[]>([]);
+  const [report, setReport] = useState<GapReport | null>(null);
+  const [check, setCheck] = useState<CheckState>({ status: "idle" });
+  const [visuals, setVisuals] = useState<Record<string, VisualState>>({});
+  const [notes, setNotes] = useState<RevisionNotesState>({ status: "idle" });
 
   const markScheme = scheme.status === "ready" ? scheme.data : null;
 
-  const transcriptRef = useRef(transcript);
+  // Avatar tool calls and timers run outside React render; read the latest state through a ref.
+  const latest = useRef({ curriculum, markScheme, results, transcript, report, view, focusIds, boardVersion, notes });
   useEffect(() => {
-    transcriptRef.current = transcript;
-  }, [transcript]);
-
-  const rail = useRail({
-    markScheme,
-    curriculumText: curriculum?.text ?? "",
-    getTranscript: () => timed(transcriptRef.current),
-    getWhiteboard: () => boardRef.current?.exportSnapshotBase64() ?? undefined,
-    getWhiteboardSize: () => {
-      const s = boardRef.current?.exportSnapshot();
-      return s ? { width: s.width, height: s.height } : null;
-    },
-  });
+    latest.current = { curriculum, markScheme, results, transcript, report, view, focusIds, boardVersion, notes };
+  }, [curriculum, markScheme, results, transcript, report, view, focusIds, boardVersion, notes]);
 
   const addLine = useCallback((speaker: TranscriptLine["speaker"], text: string) => {
     const now = Date.now();
     sessionStart.current ??= now;
     const line: TranscriptLine = { id: `l${now}-${lineSeq++}`, speaker, text, at: new Date(now).toISOString(), t: mmss(now - sessionStart.current) };
-    // Keep the ref current at once, so live marking poked below already sees this line.
-    transcriptRef.current = [...transcriptRef.current, line];
-    setTranscript(transcriptRef.current);
+    latest.current.transcript = [...latest.current.transcript, line];
+    setTranscript(latest.current.transcript);
   }, []);
 
-  const { notifyStudentLine } = rail;
-  const onLine = useCallback(
-    (speaker: Speaker, text: string) => {
-      const clean = text.trim();
-      if (!clean) return;
-      addLine(speaker, clean);
-      if (speaker === "student") notifyStudentLine();
-    },
-    [addLine, notifyStudentLine],
-  );
+  /** Results change: keep the ref in step at once (tool calls may read it before the next render). */
+  const updateResults = useCallback((fn: (prev: CriterionResult[]) => CriterionResult[]) => {
+    const next = fn(latest.current.results);
+    latest.current.results = next;
+    setResults(next);
+  }, []);
 
   // ---- Mark scheme ----------------------------------------------------------------------------
   const schemeSeq = useRef(0);
-  const buildScheme = useCallback(async (cur: CurriculumContext, file: string, topic: string) => {
-    const seq = ++schemeSeq.current;
-    setScheme({ status: "loading" });
-    try {
-      const s = await fetchMarkScheme({ curriculumText: cur.text, topic, sourceFile: file });
-      if (seq === schemeSeq.current) setScheme({ status: "ready", data: s });
-    } catch (e) {
-      if (seq === schemeSeq.current) setScheme({ status: "error", error: e instanceof Error ? e.message : "Could not draft a mark scheme." });
-    }
-  }, []);
+  const resetSession = useCallback((s: MarkScheme | null) => {
+    updateResults(() => (s ? emptyResults(s) : []));
+    latest.current.report = null;
+    setReport(null);
+    setVisuals({});
+    setNotes({ status: "idle" });
+    setCheck({ status: "idle" });
+    setFocusIds([]);
+    setView("board");
+  }, [updateResults]);
+
+  const buildScheme = useCallback(
+    async (cur: CurriculumContext, file: string, topic: string) => {
+      const seq = ++schemeSeq.current;
+      setScheme({ status: "loading" });
+      try {
+        const s = await fetchMarkScheme({ curriculumText: cur.text, topic, sourceFile: file });
+        if (seq !== schemeSeq.current) return;
+        latest.current.markScheme = s;
+        setScheme({ status: "ready", data: s });
+        resetSession(s);
+      } catch (e) {
+        if (seq === schemeSeq.current) setScheme({ status: "error", error: e instanceof Error ? e.message : "Could not draft a mark scheme." });
+      }
+    },
+    [resetSession],
+  );
 
   const onCurriculumChange = (cur: CurriculumContext | null, fileName?: string) => {
     setCurriculum(cur);
-    setCentre("board");
     if (!cur) {
       schemeSeq.current++;
       setScheme({ status: "idle" });
+      resetSession(null);
       return;
     }
     if (fileName) {
@@ -114,11 +135,37 @@ export function Workspace() {
     }
   };
 
-  // ---- Parked points show up in the conversation feed ------------------------------------------
+  const editScheme = (s: MarkScheme) => {
+    latest.current.markScheme = s;
+    setScheme({ status: "ready", data: s });
+    // Keep progress for criteria that still exist; new ones start empty.
+    updateResults((prev) => {
+      const byId = new Map(prev.map((r) => [r.criterionId, r]));
+      return emptyResults(s).map((e) => byId.get(e.criterionId) ?? e);
+    });
+  };
+
+  // ---- Live marking (T11 decides when; we own the results) ---------------------------------------
+  const studentLines = transcript.filter((l) => l.speaker === "student").length;
+  const live = useLiveAnalysis({
+    enabled: !!markScheme && view === "board",
+    getInput: () => {
+      const { markScheme: s, transcript: lines } = latest.current;
+      if (!s) return null;
+      return { markScheme: s, transcript: timed(lines), whiteboardBase64: boardRef.current?.exportSnapshotBase64() ?? undefined, mode: "live" };
+    },
+    onResults: (incoming, req) => {
+      const s = latest.current.markScheme;
+      if (!s || req.markScheme !== s || latest.current.view !== "board") return;
+      updateResults((prev) => mergeLiveResults(s, prev, incoming, req.transcript));
+    },
+    changeKey: `${studentLines}:${boardVersion}`,
+  });
+
+  // Parked points show up in the conversation feed.
   const parkedSeen = useRef(new Set<string>());
-  const results = rail.state?.results;
   useEffect(() => {
-    if (!markScheme || !results) {
+    if (!markScheme) {
       parkedSeen.current = new Set();
       return;
     }
@@ -131,58 +178,165 @@ export function Workspace() {
     }
   }, [results, markScheme, addLine]);
 
-  // ---- Checking and the end screen --------------------------------------------------------------
-  // Study-plan ticks are local to the UI; the report itself comes from the rail.
-  const [doneSteps, setDoneSteps] = useState<Set<string>>(new Set());
-  const finalReport = rail.final.status === "ready" ? rail.final.data : null;
-  const report = useMemo(
-    () => (finalReport ? { ...finalReport, studyPlan: finalReport.studyPlan.map((s) => ({ ...s, done: doneSteps.has(s.id) })) } : null),
-    [finalReport, doneSteps],
-  );
-  const toggleStep = (id: string) =>
-    setDoneSteps((d) => {
-      const next = new Set(d);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  const ended = rail.view === "end";
+  const parkCriterion = useCallback((id: string) => updateResults((prev) => parkResult(prev, id)), [updateResults]);
 
-  /** Snap & Check: mark now, and show the gap notes in place of the whiteboard (not the end screen). */
-  const snapAndCheck = () => {
-    setCentre("notes");
-    void rail.finish();
-    rail.setView("session");
-  };
+  // ---- Final marking --------------------------------------------------------------------------
+  const finalRun = useRef<{ key: string; promise: Promise<GapReport | null> } | null>(null);
+  const reportKey = useRef("");
+  /** "<reportKey>:<criterionId>" of every visual already requested, so the same image is never paid for twice. */
+  const requestedVisuals = useRef(new Set<string>());
 
-  // On the end screen, draw up to MAX_LEARN_IMAGES gaps, worst first (the primary gap is already started).
-  const { requestVisual } = rail;
-  useEffect(() => {
-    if (!ended || !report || !markScheme) return;
-    for (const g of gapsOf(markScheme, report).slice(0, MAX_LEARN_IMAGES)) requestVisual(g.criterion.id);
-  }, [ended, report, markScheme, requestVisual]);
+  const generateVisualExplainer = useCallback(async (criterionId?: string, force = false): Promise<VisualExplainer | null> => {
+    const { report: r, markScheme: s } = latest.current;
+    const id = criterionId ?? r?.primaryGapId;
+    const c = s?.criteria.find((x) => x.id === id);
+    const res = r?.results.find((x) => x.criterionId === id);
+    if (!r || !s || !c || !res) return null;
+    const tag = `${reportKey.current}:${c.id}`;
+    if (!force && requestedVisuals.current.has(tag)) return null;
+    requestedVisuals.current.add(tag);
+    setVisuals((v) => ({ ...v, [c.id]: { status: "loading" } }));
+    // Ignore results that arrive after a newer report replaced this one.
+    const setForThisReport = (state: VisualState) => {
+      if (latest.current.report === r) setVisuals((v) => ({ ...v, [c.id]: state }));
+    };
+    try {
+      const visual = await generateVisual(visualRequestForCriterion(c, res, s.topic));
+      setForThisReport({ status: "ready", data: visual });
+      return visual;
+    } catch (e) {
+      setForThisReport({ status: "error", error: e instanceof Error ? e.message : "Could not draw this one." });
+      return null;
+    }
+  }, []);
+
+  /** Final marking, shared between callers; reuses the last report if nothing changed since. */
+  const runFinal = useCallback((): Promise<GapReport | null> => {
+    const { markScheme: s, transcript: lines, boardVersion: bv, report: last } = latest.current;
+    if (!s) {
+      setCheck({ status: "error", error: "Upload your lecture notes first, so there is a mark scheme to grade against." });
+      return Promise.resolve(null);
+    }
+    const key = `${timed(lines).length}:${bv}:${s.criteria.length}:${s.totalMarks}`;
+    if (last && reportKey.current === key) {
+      setCheck({ status: "idle" });
+      return Promise.resolve(last);
+    }
+    if (finalRun.current?.key === key) return finalRun.current.promise;
+
+    const board = boardRef.current?.exportSnapshotBase64() ?? undefined;
+    if (!lines.some((l) => l.speaker === "student") && !board) {
+      setCheck({ status: "error", error: "Explain something first: talk to Sam, type below the video, or sketch on the whiteboard." });
+      return Promise.resolve(null);
+    }
+    setCheck({ status: "checking" });
+    const promise = (async () => {
+      try {
+        const raw = await analyzeFinal({ markScheme: s, transcript: timed(lines), whiteboardBase64: board });
+        if (latest.current.markScheme !== s) return null;
+        const r = finalizeReport(s, raw, latest.current.results);
+        reportKey.current = key;
+        latest.current.report = r;
+        setReport(r);
+        updateResults(() => r.results);
+        setVisuals({});
+        setNotes({ status: "idle" });
+        latest.current.notes = { status: "idle" };
+        setCheck({ status: "idle" });
+        return r;
+      } catch (e) {
+        setCheck({ status: "error", error: e instanceof Error ? e.message : "The check failed. Try again." });
+        return null;
+      } finally {
+        if (finalRun.current?.key === key) finalRun.current = null;
+      }
+    })();
+    finalRun.current = { key, promise };
+    return promise;
+  }, [updateResults]);
+
+  const checkExplanation = useCallback(async () => {
+    setView("notes");
+    const r = await runFinal();
+    if (r?.primaryGapId) void generateVisualExplainer(r.primaryGapId);
+    return r;
+  }, [runFinal, generateVisualExplainer]);
+
+  const loadNotes = useCallback(async (r: GapReport) => {
+    const { markScheme: s, curriculum: cur } = latest.current;
+    if (!s || !cur || gapsOf(s, r).length === 0) return;
+    latest.current.notes = { status: "loading" };
+    setNotes({ status: "loading" });
+    try {
+      const data = await fetchRevisionNotes({ markScheme: s, report: r, curriculumText: cur.text });
+      if (latest.current.report === r) setNotes({ status: "ready", data });
+    } catch (e) {
+      if (latest.current.report === r) setNotes({ status: "error", error: e instanceof Error ? e.message : "Could not write revision notes." });
+    }
+  }, []);
+
+  const finishSession = useCallback(async () => {
+    setView("summary");
+    const r = await runFinal();
+    const s = latest.current.markScheme;
+    if (!r || !s) {
+      setView("notes"); // shows the error / empty state
+      return r;
+    }
+    if (latest.current.notes.status === "idle" || latest.current.notes.status === "error") void loadNotes(r);
+    // Primary gap first, then the next worst; at most MAX_LEARN_IMAGES in parallel.
+    for (const g of gapsOf(s, r).slice(0, MAX_LEARN_IMAGES)) void generateVisualExplainer(g.criterion.id);
+    return r;
+  }, [runFinal, loadNotes, generateVisualExplainer]);
 
   const teachNext = (ids: string[]) => {
-    if (!markScheme) return;
-    const picked = markScheme.criteria.filter((c) => ids.includes(c.id));
-    const r = rail as typeof rail & { resume?: (ids?: string[]) => void };
-    if (r.resume) r.resume(ids);
-    else rail.setView("session");
-    setCentre("board");
+    const s = latest.current.markScheme;
+    if (!s) return;
+    const picked = s.criteria.filter((c) => ids.includes(c.id));
+    setFocusIds(ids);
+    latest.current.focusIds = ids;
+    // A second chance: un-park these and reset their attempts.
+    updateResults((prev) =>
+      prev.map((r) =>
+        ids.includes(r.criterionId) && r.parked ? { ...r, parked: false, attempts: 0, status: r.awarded > 0 ? "partial" : "missed" } : r,
+      ),
+    );
+    setView("board");
     addLine("system", `Next up: ${picked.map((c) => c.title).join(", ")}`);
+    sessionRef.current?.setFocus?.(
+      picked.map((c) => ({
+        id: c.id,
+        title: c.title,
+        missingSteps: latest.current.results.find((r) => r.criterionId === c.id)?.missingSteps ?? c.expected,
+      })),
+    );
   };
 
-  const check: CheckState =
-    rail.final.status === "loading"
-      ? { status: "checking" }
-      : rail.final.status === "error"
-        ? { status: "error", error: rail.final.error }
-        : { status: "idle" };
-  const checking = check.status === "checking";
-
   // ---- Avatar ---------------------------------------------------------------------------------
+  const actions: WorkspaceActions = useMemo(
+    () => ({
+      captureWhiteboard: () => boardRef.current?.exportSnapshot() ?? null,
+      getRail: () => {
+        const l = latest.current;
+        return { markScheme: l.markScheme, results: l.results, transcript: timed(l.transcript), focusIds: l.focusIds, view: l.view };
+      },
+      parkCriterion,
+      checkExplanation,
+      openGapReport: () => {
+        if (latest.current.report) setView("notes");
+      },
+      finishSession,
+      getReport: () => latest.current.report,
+      generateVisualExplainer: (id?: string) => generateVisualExplainer(id),
+    }),
+    [parkCriterion, checkExplanation, finishSession, generateVisualExplainer],
+  );
+
   const handlers: AvatarHandlers = useMemo(
     () => ({
-      onTranscript: onLine,
+      onTranscript: (speaker, text) => {
+        if (text.trim()) addLine(speaker, text.trim());
+      },
       onCue: (c) => {
         setCue(c);
         if (cueTimer.current) clearTimeout(cueTimer.current);
@@ -193,33 +347,30 @@ export function Workspace() {
         setAvatarDetail(detail);
       },
     }),
-    [onLine],
+    [addLine],
   );
 
-  const { attachAvatar, avatarActions } = rail;
-  const disconnect = useCallback(() => {
-    attachAvatar(null);
+  const connect = useCallback(async () => {
     sessionRef.current?.disconnect();
     sessionRef.current = null;
-    setCue(null);
-  }, [attachAvatar]);
-
-  const connect = useCallback(async () => {
-    disconnect();
     sessionStart.current ??= Date.now();
+    // The persona is scoped to the topic and notes at connect time.
+    const bridge = createAnamAvatarBridge(() => {
+      const { curriculum: cur, markScheme: s } = latest.current;
+      return { topic: s?.topic || cur?.topic || cur?.title, notesExcerpt: cur?.text.slice(0, NOTES_EXCERPT_CHARS) };
+    });
     try {
-      const session = await anamRailBridge.connect({
-        videoElementId: ANAM_VIDEO_ID,
-        rail: avatarActions,
-        handlers,
-        context: { topic: markScheme?.topic || curriculum?.topic || curriculum?.title, notesExcerpt: curriculum?.text.slice(0, NOTES_EXCERPT_CHARS) },
-      });
-      sessionRef.current = session;
-      attachAvatar(session);
+      sessionRef.current = await bridge.connect({ videoElementId: ANAM_VIDEO_ID, actions, handlers });
     } catch (e) {
       handlers.onStatus("error", e instanceof Error ? e.message : "Could not connect to the avatar.");
     }
-  }, [disconnect, avatarActions, handlers, attachAvatar, markScheme, curriculum]);
+  }, [actions, handlers]);
+
+  const disconnect = useCallback(() => {
+    sessionRef.current?.disconnect();
+    sessionRef.current = null;
+    setCue(null);
+  }, []);
 
   useEffect(
     () => () => {
@@ -229,9 +380,11 @@ export function Workspace() {
     [],
   );
 
-  const studentLines = transcript.filter((l) => l.speaker === "student").length;
-  const railResults = ended && report ? report.results : (rail.state?.results ?? []);
-  const parkedIds = railResults.filter((r) => r.parked).map((r) => r.criterionId);
+  const toggleStep = (stepId: string) =>
+    setReport((r) => (r ? { ...r, studyPlan: r.studyPlan.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) } : r));
+
+  const checking = check.status === "checking";
+  const parkedIds = results.filter((r) => r.parked).map((r) => r.criterionId);
   const retryIds = parkedIds.length > 0 ? parkedIds : report && markScheme ? gapsOf(markScheme, report).map((g) => g.criterion.id) : [];
 
   return (
@@ -257,24 +410,14 @@ export function Workspace() {
           <span className="hidden text-xs font-medium text-muted xl:inline">
             {studentLines} {studentLines === 1 ? "line" : "lines"} explained · {boardEmpty ? "board empty" : "board in use"}
           </span>
-          {report && (ended || centre !== "notes") && (
-            <button
-              type="button"
-              onClick={() => {
-                rail.setView("session");
-                setCentre("notes");
-              }}
-              className="hidden h-11 items-center rounded-xl px-3 text-sm font-bold text-muted hover:bg-canvas sm:inline-flex"
-            >
+          {report && view !== "notes" && (
+            <button type="button" onClick={() => setView("notes")} className="hidden h-11 items-center rounded-xl px-3 text-sm font-bold text-muted hover:bg-canvas sm:inline-flex">
               Gap notes
             </button>
           )}
           <button
             type="button"
-            onClick={() => {
-              // finish() switches to the end view itself, except when it reuses an earlier run (e.g. after Snap & Check).
-              void rail.finish().then((r) => r && rail.setView("end"));
-            }}
+            onClick={() => void finishSession()}
             disabled={!markScheme || checking}
             className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white transition hover:bg-accent-strong disabled:opacity-40"
           >
@@ -292,25 +435,25 @@ export function Workspace() {
             curriculum={curriculum}
             onCurriculumChange={onCurriculumChange}
             scheme={scheme}
-            results={railResults}
-            liveId={ended ? null : (rail.state?.activeId ?? null)}
-            analysing={rail.live.running}
+            results={results}
+            liveId={view === "board" ? liveFocusId(results) : null}
+            analysing={live.analysing}
             onRebuild={(topic) => curriculum && void buildScheme({ ...curriculum, topic }, sourceFile, topic)}
-            onEdit={(s) => setScheme({ status: "ready", data: s })}
-            final={ended}
+            onEdit={editScheme}
+            final={view === "summary"}
           />
         </div>
 
         <div className="order-3 shrink-0 lg:order-none lg:min-h-0">
           <CentrePanel
-            view={ended ? "summary" : centre}
+            view={view}
             board={
               <WhiteboardCanvas
                 ref={boardRef}
                 checking={checking}
-                onSnapAndCheck={snapAndCheck}
+                onSnapAndCheck={() => void checkExplanation()}
                 onEmptyChange={setBoardEmpty}
-                onChange={notifyStudentLine}
+                onChange={setBoardVersion}
               />
             }
             notes={
@@ -318,11 +461,11 @@ export function Workspace() {
                 scheme={markScheme}
                 report={report}
                 check={check}
-                visuals={rail.visuals}
-                onBack={() => setCentre("board")}
-                onRecheck={snapAndCheck}
+                visuals={visuals}
+                onBack={() => setView("board")}
+                onRecheck={() => void checkExplanation()}
                 onTeachNext={teachNext}
-                onRetryVisual={(id) => rail.requestVisual(id)}
+                onRetryVisual={(id) => void generateVisualExplainer(id, true)}
                 onToggleStep={toggleStep}
               />
             }
@@ -331,31 +474,16 @@ export function Workspace() {
                 <SummaryView
                   scheme={markScheme}
                   report={report}
-                  notes={rail.notes}
-                  visuals={rail.visuals}
-                  onRetryVisual={(id) => rail.requestVisual(id)}
+                  notes={notes}
+                  visuals={visuals}
+                  onRetryNotes={() => void loadNotes(report)}
+                  onRetryVisual={(id) => void generateVisualExplainer(id, true)}
                   onTeachBack={teachNext}
-                  onBack={() => {
-                    rail.setView("session");
-                    setCentre("board");
-                  }}
+                  onBack={() => setView("board")}
                 />
               ) : (
-                <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl border border-line bg-card p-6 text-center text-sm font-semibold text-muted" role="status">
-                  {check.status === "error" ? (
-                    <>
-                      <p className="font-bold text-missed">The final marking didn’t finish</p>
-                      <p>{check.error}</p>
-                      <button type="button" onClick={() => void rail.finish()} className="inline-flex h-11 items-center rounded-xl border border-line px-4 font-bold text-ink hover:bg-canvas">
-                        Try again
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <LoaderCircle className="h-6 w-6 animate-spin text-accent" />
-                      Marking your session against the mark scheme… about 15 seconds
-                    </>
-                  )}
+                <div className="flex h-full items-center justify-center gap-3 rounded-2xl border border-line bg-card p-6 text-sm font-semibold text-muted" role="status">
+                  <LoaderCircle className="h-5 w-5 animate-spin text-accent" /> Marking your session against the mark scheme… about 15 seconds
                 </div>
               )
             }
@@ -371,12 +499,12 @@ export function Workspace() {
             onConnect={() => void connect()}
             onDisconnect={disconnect}
             onTypedLine={(text) => {
-              onLine("student", text);
+              addLine("student", text);
               // When the avatar is live, it hears typed lines too.
               if (avatarStatus === "live") sessionRef.current?.sendText?.(text);
             }}
           >
-            {ended && report && retryIds.length > 0 && (
+            {view === "summary" && report && retryIds.length > 0 && (
               <div className="rounded-2xl border border-accent bg-accent-soft p-3">
                 <p className="text-sm font-bold">
                   {parkedIds.length > 0 ? `${parkedIds.length} parked ${parkedIds.length === 1 ? "point" : "points"} to try again` : "Have another go at your gaps"}

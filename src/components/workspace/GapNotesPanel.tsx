@@ -68,7 +68,7 @@ export function VisualSlot({ state, alt, onRetry, compact }: { state: VisualStat
     <video src={v.url} controls autoPlay muted loop playsInline className="w-full rounded-xl border border-line bg-black" />
   ) : (
     // eslint-disable-next-line @next/next/no-img-element -- remote fal URL, not worth next/image config
-    <img src={v.url} alt={alt} className="w-full rounded-xl border border-line bg-white object-contain" />
+    <img src={v.url} alt={alt} className="max-h-[60vh] w-full rounded-xl border border-line bg-white object-contain" />
   );
 }
 
