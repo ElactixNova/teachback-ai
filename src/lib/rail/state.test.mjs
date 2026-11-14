@@ -73,8 +73,8 @@ test("park, find by title, status text and change note", () => {
   const text = railStatusText(scheme, after);
   assert.match(text, /0\/5 marks/);
   assert.match(text, /Parked \(do not ask about these again\): Where it happens/);
-  assert.match(text, /leads them to "Inputs and outputs"/);
-  assert.match(railStatusText(scheme, before, ["c2"]), /chose to work on: Where it happens.*leads them to "Where it happens"/);
+  assert.match(text, /move to "Inputs and outputs"/);
+  assert.match(railStatusText(scheme, before, ["c2"]), /chose to work on: Where it happens.*move to "Where it happens"/);
 });
 
 test("finalizeReport keeps the better mark, attempts and parking, and recomputes totals", () => {
@@ -141,4 +141,41 @@ test("time helpers", () => {
     toTimedLines([{ speaker: "student", text: "hi", at: "2026-11-14T18:01:02Z" }, { speaker: "avatar", text: " ", at: "2026-11-14T18:01:03Z" }], start),
     [{ speaker: "student", text: "hi", t: "01:02" }],
   );
+});
+
+test("the avatar is told what is on the board, so it never asks to repeat it", () => {
+  const before = [r("c1", "partial", 1), r("c2", "not_covered", 0)];
+  const after = [{ ...r("c1", "partial", 1), boardObservation: "CO2 + H2O -> C6H12O6 + O2, not balanced" }, r("c2", "not_covered", 0)];
+  const note = railChangeNote(scheme, before, after);
+  assert.match(note, /On their whiteboard .*never ask them to say aloud.*Inputs and outputs: CO2 \+ H2O/);
+  assert.equal(railChangeNote(scheme, after, after), null);
+  assert.match(railStatusText(scheme, after), /On their whiteboard/);
+  assert.doesNotMatch(railStatusText(scheme, before), /whiteboard/);
+});
+
+test("board note: first sighting fires, rewording the same drawing does not, a new drawing does", () => {
+  const withBoard = (text) => [{ ...r("c1", "partial", 1), boardObservation: text }, r("c2", "not_covered", 0)];
+  const none = [r("c1", "partial", 1), r("c2", "not_covered", 0)];
+  assert.ok(railChangeNote(scheme, none, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced.")));
+  assert.equal(railChangeNote(scheme, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced."), withBoard("The board shows CO2 + H2O -> C6H12O6 + O2 which is not balanced.")), null);
+  assert.ok(railChangeNote(scheme, withBoard("Written: CO2 + H2O -> C6H12O6 + O2, not balanced."), withBoard("A leaf diagram with arrows showing sunlight and chloroplasts.")));
+});
+
+test("rail status: follow up a partly explained point first, then ask the next point's probe", () => {
+  const sch = {
+    ...scheme,
+    criteria: [
+      { ...scheme.criteria[0], probe: "Can you write the balanced symbol equation?", ask: "write" },
+      { ...scheme.criteria[1], probe: "Where exactly in the plant does it happen?", ask: "say" },
+    ],
+  };
+  const partial = { ...r("c1", "in_progress", 1), missingSteps: ["glucose"], attempts: 0 };
+  const text = railStatusText(sch, [partial, r("c2", "not_covered", 0)]);
+  assert.match(text, /FIRST, before moving on, follow up on "Inputs and outputs".*"glucose"/);
+  assert.match(text, /After that, move to "Where it happens"\. Ask it in your own words.*Where exactly in the plant/);
+  assert.match(text, /reacting in a few words/);
+  // A point with both tries used is not chased again; a write point asks them to write.
+  const used = { ...partial, attempts: 2 };
+  assert.doesNotMatch(railStatusText(sch, [used, r("c2", "not_covered", 0)]), /FIRST/);
+  assert.match(railStatusText({ ...sch, criteria: [sch.criteria[0], sch.criteria[1]] }, [r("c1", "not_covered", 0), r("c2", "full", 2)]), /have them write it on the board/);
 });

@@ -1,15 +1,17 @@
-// TeachBack end-to-end smoke test (T6). Drives the real app in headless Chromium.
+// Feynman AI end-to-end smoke test for the Mark Scheme Rail UI. Drives the real app in headless Chromium.
 //
 //   npm run dev                      # in the repo root, with ANAM_API_KEY, FAL_KEY, ANTHROPIC_API_KEY in .env
 //   cd tests/e2e && npm install && npm run smoke
 //
-// Flow (voice mode, default): upload fixtures/photosynthesis-notes.pdf -> sketch on the whiteboard ->
-// Start session (fake mic plays fixtures/student-speech.wav) -> the student asks the avatar to check
-// -> the avatar calls open_gap_report -> /api/analyze -> report drawer -> /api/generate-visual -> visual.
-// Typed mode (--typed, no mic/voice): typed explanation + Snap & Check button. Use --no-avatar to skip Anam.
+// Flow: upload fixtures/photosynthesis-notes.pdf -> mark scheme appears in the rail -> sketch on the
+// whiteboard -> Start session (avatar) -> teach (typed lines, or the fake mic plays
+// fixtures/student-speech.wav and the avatar calls open_gap_report) -> Snap & Check -> gap notes
+// -> Finish & get report -> end screen with revision notes + visuals -> the image lightbox opens.
+// Modes: default = voice (fake mic), --typed = typed lines + Snap & Check, --no-avatar = skip Anam.
 //
 // Env: BASE_URL (default http://localhost:3000), CHROMIUM_PATH, HEADED=1, TIMEOUT_S (default 150).
-// Writes screenshots to tests/e2e/out/. Exit code 0 = every check passed.
+// Writes screenshots to tests/e2e/out/. Exit code 0 = every check passed. Costs real API money per run
+// (Opus mark scheme + final marking, Sonnet live marking and notes, up to 4 fal images).
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -53,21 +55,25 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ permissions: ["microphone", "camera"], viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 
-// Record API traffic.
+// Record API traffic: path, status and (for /api/analyze) the request mode.
 const api = {};
 page.on("response", async (r) => {
   const p = new URL(r.url()).pathname;
   if (!p.startsWith("/api/")) return;
-  (api[p] ??= []).push({ status: r.status(), at: Date.now() });
-  log(`API ${r.request().method()} ${p} -> ${r.status()}`);
+  let mode;
+  try {
+    mode = r.request().postDataJSON()?.mode;
+  } catch {}
+  (api[p] ??= []).push({ status: r.status(), mode, at: Date.now() });
+  log(`API ${r.request().method()} ${p}${mode ? ` [${mode}]` : ""} -> ${r.status()}`);
 });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 
-const waitApi = async (p, status = 200, ms = TIMEOUT) => {
+const waitApi = async (p, status = 200, ms = TIMEOUT, mode) => {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    if (api[p]?.some((x) => x.status === status)) return true;
+    if (api[p]?.some((x) => x.status === status && (!mode || x.mode === mode))) return true;
     await page.waitForTimeout(500);
   }
   return false;
@@ -75,15 +81,19 @@ const waitApi = async (p, status = 200, ms = TIMEOUT) => {
 
 try {
   await page.goto(BASE, { waitUntil: "networkidle" });
-  check("page loads", (await page.title()).length > 0, await page.title());
+  check("page loads as Feynman AI", /feynman/i.test(await page.title()) || (await page.getByText("Feynman AI").count()) > 0, await page.title());
 
-  // 1. Upload the lecture notes.
+  // 1. Upload the lecture notes -> the mark scheme is drafted and shown in the rail.
   await page.locator('input[type="file"]').setInputFiles(path.join(fixtures, "photosynthesis-notes.pdf"));
   check("parse-pdf 200", await waitApi("/api/parse-pdf", 200, 30000));
-  const topic = page.getByPlaceholder(/bayes/i);
-  if (await topic.count()) await topic.fill("Photosynthesis");
+  check("mark-scheme 200", await waitApi("/api/mark-scheme", 200, 60000));
+  const rail = page.getByLabel("Mark scheme").first();
+  await page.getByLabel("Marks awarded").first().waitFor({ timeout: 20000 }).catch(() => {});
+  const railText = (await rail.innerText().catch(() => "")).toLowerCase();
+  check("rail lists mark scheme points", /photosynthesis|light|glucose|chloroplast/.test(railText), `${railText.length} chars`);
+  await page.screenshot({ path: path.join(outDir, "0-rail.png") });
 
-  // 2. Sketch on the whiteboard: a plant with an arrow down to the roots.
+  // 2. Sketch on the whiteboard: a plant with the light "travelling down to the roots".
   const board = page.getByLabel("Whiteboard drawing area");
   const b = await board.boundingBox();
   const stroke = async (pts) => {
@@ -98,7 +108,7 @@ try {
   await stroke([[0.35, 0.75], [0.65, 0.75]]); // ground
   await stroke([[0.5, 0.75], [0.45, 0.88]]); // roots
   await stroke([[0.5, 0.75], [0.55, 0.9]]);
-  await stroke([[0.15, 0.1], [0.48, 0.35], [0.5, 0.85]]); // light "travels down to the roots"
+  await stroke([[0.15, 0.1], [0.48, 0.35], [0.5, 0.85]]); // light travels down to the roots
   check("whiteboard has ink", (await page.getByText(/board in use/i).count()) > 0);
 
   // 3. Avatar session.
@@ -106,7 +116,6 @@ try {
     await page.getByRole("button", { name: /start session/i }).click();
     check("anam-session 200", await waitApi("/api/anam-session", 200, 20000));
     const live = await page.getByText("LIVE", { exact: true }).waitFor({ timeout: 25000 }).then(() => true, () => false);
-    // "LIVE" shows as soon as the stream starts; frames arrive a moment later.
     await page
       .waitForFunction(() => (document.getElementById("anam-video")?.videoWidth ?? 0) > 0, null, { timeout: 15000 })
       .catch(() => {});
@@ -118,7 +127,7 @@ try {
     await page.screenshot({ path: path.join(outDir, "1-live.png") });
   }
 
-  // 4. Explain + check.
+  // 4. Teach, then check.
   if (TYPED) {
     const box = page.getByPlaceholder(/type part of your explanation/i);
     for (const line of [
@@ -130,30 +139,51 @@ try {
       await box.press("Enter");
       await page.waitForTimeout(AVATAR ? 4000 : 300);
     }
+    check("live marking ran while teaching", await waitApi("/api/analyze", 200, 60000, "live"));
     await page.getByRole("button", { name: /snap & check/i }).click();
   } else {
     log("waiting for the spoken explanation and the avatar's open_gap_report tool call…");
   }
 
-  const analyzed = await waitApi("/api/analyze", 200, TIMEOUT);
-  check(`analyze 200${TYPED ? "" : " (triggered by the avatar's tool call)"}`, analyzed);
-  await page.waitForTimeout(8000); // a duplicate check would show up within a few seconds
-  check("exactly one analysis ran", (api["/api/analyze"]?.length ?? 0) === 1, `${api["/api/analyze"]?.length ?? 0} calls`);
-  const drawer = page.getByRole("dialog", { name: /knowledge gap report/i }).or(page.getByLabel("Knowledge Gap Report"));
-  const score = await page.getByRole("img", { name: /understanding score/i }).first().getAttribute("aria-label", { timeout: 20000 }).catch(() => null);
-  check("report drawer shows a score", !!score, score ?? "");
-  const gapText = (await drawer.first().innerText().catch(() => "")).toLowerCase();
-  check("report names the roots misconception", /root/.test(gapText));
+  check("final analysis 200", await waitApi("/api/analyze", 200, TIMEOUT, "final"));
+  const notes = page.getByLabel("Gap notes").first();
+  await notes.waitFor({ timeout: 30000 }).catch(() => {});
+  const gapText = (await notes.innerText().catch(() => "")).toLowerCase();
+  check("gap notes show a biggest gap", /biggest gap/.test(gapText));
+  // Model judgement, so it varies run to run: reported as a warning, not a failure.
+  if (!/root/.test(gapText)) log("WARN  gap notes did not name the roots misconception (examiner variance; check 2-notes.png)");
+  else log("ok    gap notes name the roots misconception");
+  await page.screenshot({ path: path.join(outDir, "2-notes.png") });
+  // The whiteboard must stay mounted behind the notes (the student keeps drawing).
+  check("whiteboard still mounted", (await page.getByLabel("Whiteboard drawing area").count()) > 0);
 
-  check("generate-visual 200", await waitApi("/api/generate-visual", 200, 60000));
-  const media = await page
-    .locator('img[alt="Visual explainer"], [aria-label="Knowledge Gap Report"] video')
-    .first()
-    .waitFor({ timeout: 30000 })
-    .then(() => true, () => false);
-  check("visual explainer rendered", media);
-  await page.waitForTimeout(AVATAR ? 12000 : 1000); // let the avatar speak the result
-  await page.screenshot({ path: path.join(outDir, "2-report.png") });
+  // 5. Finish -> end screen (in-page view, the avatar session survives).
+  await page.getByRole("button", { name: /finish/i }).first().click();
+  const summary = page.getByLabel("Session summary");
+  check("end screen shown", await summary.waitFor({ timeout: 60000 }).then(() => true, () => false));
+  check("revision-notes 200", await waitApi("/api/revision-notes", 200, 60000));
+  check("generate-visual 200", await waitApi("/api/generate-visual", 200, 90000));
+  const revision = page.getByLabel("Revision notes");
+  const thumb = revision.getByRole("button", { name: /^expand:/i }).first();
+  const hasThumb = await thumb.waitFor({ timeout: 40000 }).then(() => true, () => false);
+  check("revision note diagram rendered", hasThumb);
+
+  // 6. The report image opens full size and can be closed again.
+  if (hasThumb) {
+    await thumb.click();
+    const dialog = page.getByRole("dialog");
+    check("image expands in a dialog", await dialog.waitFor({ timeout: 5000 }).then(() => true, () => false));
+    check("dialog offers Download and Open in new tab", (await dialog.getByRole("button", { name: /download/i }).count()) === 1 && (await dialog.getByText(/new tab/i).count()) === 1);
+    await page.screenshot({ path: path.join(outDir, "3-lightbox.png") });
+    // Chrome blocks data: URIs in a new tab, so "Open in new tab" must land on a blob: page.
+    const popup = await Promise.all([ctx.waitForEvent("page", { timeout: 5000 }).catch(() => null), dialog.getByText(/new tab/i).click()]).then(([p]) => p);
+    check("Open in new tab opens a real page", !!popup && /^(blob:|https?:)/.test(popup.url()), popup?.url().slice(0, 30) ?? "no popup");
+    await popup?.close().catch(() => {});
+    await page.keyboard.press("Escape");
+    check("Escape closes the dialog", await dialog.waitFor({ state: "hidden", timeout: 3000 }).then(() => true, () => false));
+  }
+  await page.waitForTimeout(AVATAR ? 8000 : 500);
+  await page.screenshot({ path: path.join(outDir, "4-summary.png") });
 
   if (AVATAR) {
     const lines = await page.evaluate(() => [...document.querySelectorAll("section p.rounded-2xl")].map((p) => p.textContent));

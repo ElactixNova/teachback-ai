@@ -27,14 +27,16 @@ const FinalSchema = LiveSchema.extend({
   ),
 });
 
-const EXAMINER_PROMPT = `You are a strict but fair examiner marking a student's spoken explanation against a mark scheme.
+const EXAMINER_PROMPT = `You are a fair, encouraging examiner (think GCSE/A-level mark scheme with benefit of the doubt) marking a student's spoken explanation against a mark scheme.
 Inputs: MARK_SCHEME (JSON), TRANSCRIPT (timestamped), WHITEBOARD (image), MODE.
 Rules:
 - Award a mark for an \`expected\` step only if the student stated it, or the whiteboard shows it, explicitly and correctly. Do not give credit for an implied step or a correct final answer without the reasoning.
 - If the student corrected themselves, mark their best final version, but mention the earlier error in \`fix\`.
 - status: full = all marks; partial = some; missed = they addressed the criterion but earned 0; not_covered = never addressed; in_progress = currently being explained (MODE=live only).
 - evidence.quote must be copied verbatim from TRANSCRIPT. Never invent quotes. If there is no relevant quote, omit evidence.
-- boardObservation: describe only what is visibly on the whiteboard, including steps that are missing between lines.
+- boardObservation: describe only what is visibly on the whiteboard, including steps that are missing between lines. Transcribe equations and formulas exactly as written (for example "CO2 + H2O -> C6H12O6 + O2"), do not silently correct them.
+- Check the correctness of anything written, not just its presence. For a chemical equation, count the atoms of every element on each side: if they differ it is NOT balanced, so it earns no mark for a step that needs a balanced or correct equation, and \`fix\` must say which element is unbalanced. The same goes for wrong coefficients, units, signs or arithmetic. A step whose wording is only "states the equation" still needs the equation to be correct. If the handwriting is too unclear to check, say so in boardObservation and do not award the mark.
+- If the student made a claim about a criterion that contradicts or misstates it (for example saying glucose is made in the roots when the criterion is about where photosynthesis happens), that criterion was addressed: status is missed (or partial if some steps were right), never not_covered. Quote the wrong claim as evidence and say in \`fix\` what was wrong.
 - missingSteps: copy them verbatim from \`expected\`.
 - fix: one or two sentences the student could say out loud to earn the missing marks. Don't lecture.
 - primaryGapId: the criterion with the most marks lost (ties: the earliest in the scheme).
@@ -45,8 +47,11 @@ Additional details:
 - Return exactly one result per criterion, using the criterion's id as criterionId, in mark-scheme order.
 - \`awarded\` is the number of expected steps earned (each step is one mark). Use null for evidence, boardObservation and fix when they do not apply.
 - Only the student's lines (marked "Student:") can earn marks. Avatar lines are context only.
+- Marking standard: award the mark when the student's meaning is clearly right, even if the wording is informal, incomplete or uses different vocabulary ("sugar" for glucose, "gets energy from the sun" for absorbing light energy). Do not demand the exact phrasing of the mark scheme. Give the benefit of the doubt on a near-miss that shows the right idea; only withhold a mark when the idea is absent, wrong, or contradicts the scheme. Exceptions that stay strict: an equation must really be balanced and a number, unit or formula must really be correct.
+- A step counts when it is said OR written/drawn on the board; a spoken equation counts if the student gives the formulas and the coefficients aloud.
 - Be fair: a step is earned when the student's words or drawing clearly make that point, even if phrased differently from the mark scheme. Mark each step separately, so a criterion the student partly explained earns the marks for the steps they did make; do not award 0 to a criterion where some steps were clearly stated.
-- In MODE=live, use "in_progress" for at most ONE criterion: the one the student is explaining in their most recent lines. Mark criteria they have already moved past as full, partial or missed, and give "in_progress" its marks earned so far. Criteria not yet discussed are "not_covered".
+- In MODE=live, be generous: do not use "missed" for a criterion the student has only just started or may still return to; use "in_progress" or "not_covered" and keep any marks earned. Only MODE=final may conclude that a criterion was missed.
+- In MODE=live, use "in_progress" for at most ONE criterion: the one the student is explaining in their most recent lines. Mark criteria they have already moved past as full or partial (missed only if they clearly gave a wrong answer), and give "in_progress" its marks earned so far. Criteria not yet discussed are "not_covered".
 - In the studyPlan, set criterionId to the criterion each step addresses (null for a general step). In MODE=live return an empty studyPlan.`;
 
 function formatTranscript(lines: TimedLine[]): string {
@@ -94,6 +99,8 @@ const SchemeSchema = z.object({
       expected: z.array(z.string()),
       page: z.number(),
       label: z.string().nullable(),
+      probe: z.string(),
+      ask: z.enum(["say", "write", "draw"]),
     }),
   ),
 });
@@ -103,9 +110,12 @@ The notes contain page markers like [Page 2]. Use only what the notes say.
 Rules:
 - Write 4 to 7 criteria for the topic. Each criterion is one idea a student must explain, with a short title.
 - \`expected\` lists the 2 to 5 mark-bearing steps for that criterion. Each step is one short, checkable statement of what a student must say or show, and is worth exactly 1 mark. No step may overlap another.
+- When a step is an equation or formula, write the full correct form in the step and say "balanced" or "correct" explicitly, so it can be checked.
 - Base every step on the notes. Do not add outside facts.
 - \`page\` is the [Page N] number where the notes teach that criterion. Never invent a page number.
 - \`label\` is a short section or lecture label from the notes (for example "Lecture 4"), or null.
+- \`probe\` is the one question a curious student would ask to draw this criterion out of the teacher. It must point at the specific steps (name the thing to produce: "Can you write the balanced symbol equation for photosynthesis?", "Where exactly does the light reaction happen, and what goes in and out?") but must NEVER contain the answer or any expected step's content. Spoken style, ONE question about ONE thing, at most 18 words, no lists of sub-questions. Do not hint at common mistakes or wrong answers (never "why can not X do it?").
+- \`ask\` is "write" when the best evidence is something written (an equation, formula, definition to copy, calculation), "draw" when it is a diagram or process (stages, cycle, apparatus), otherwise "say". Use "write" or "draw" for roughly a third of the criteria, never all.
 - Order criteria in the order a good explanation would present them.
 Return JSON only, matching the schema.`;
 

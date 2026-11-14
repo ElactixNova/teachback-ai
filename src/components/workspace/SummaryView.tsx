@@ -6,6 +6,7 @@ import { svgDataUri } from "./api";
 import { gapsOf, VisualSlot, type Gap } from "./GapNotesPanel";
 import { MarksPill, STATUS_LABEL, SourceChip, StatusIcon, displayStatus } from "./status";
 import type { Async, VisualState } from "./types";
+import { ZoomableImage } from "./ZoomableImage";
 
 /** At most this many fal images on the end screen (one per gap, worst first). */
 export const MAX_LEARN_IMAGES = 4;
@@ -23,10 +24,8 @@ interface Props {
 
 function Diagram({ note, visual, title, onRetry }: { note: RevisionNote; visual?: VisualState; title: string; onRetry: () => void }) {
   if (note.diagram.kind === "svg" && note.diagram.svg) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element -- inline SVG rendered as an image on purpose (no DOM injection)
-      <img src={svgDataUri(note.diagram.svg)} alt={`Diagram: ${title}`} className="w-full rounded-xl border border-line bg-white object-contain" />
-    );
+    // Inline SVG rendered as an image on purpose (no DOM injection).
+    return <ZoomableImage src={svgDataUri(note.diagram.svg)} alt={`Diagram: ${title}`} className="w-full rounded-xl border border-line bg-white object-contain" />;
   }
   return <VisualSlot state={visual} alt={`Diagram: ${title}`} onRetry={onRetry} compact />;
 }
@@ -126,8 +125,7 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
                   <article key={g.criterion.id} className="flex flex-col overflow-hidden rounded-2xl border border-line">
                     {svgFallback ? (
                       <div className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element -- see Diagram */}
-                        <img src={svgDataUri(note.diagram.svg!)} alt={`Diagram: ${g.criterion.title}`} className="aspect-[4/3] w-full bg-white object-contain" />
+                        <ZoomableImage src={svgDataUri(note.diagram.svg!)} alt={`Diagram: ${g.criterion.title}`} className="aspect-[4/3] w-full bg-white object-contain" />
                         {v?.status === "loading" && (
                           <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-bold text-muted">
                             <LoaderCircle className="h-3 w-3 animate-spin" /> Generating…

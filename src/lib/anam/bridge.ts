@@ -5,7 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
-import { findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
+import { boardNote, findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { connectAnam } from "./connect";
 import { TOOL } from "./tools";
@@ -87,7 +87,11 @@ function registerTools(client: AnamClient, actions: WorkspaceActions): () => voi
       onStart: async () => {
         const snap = actions.captureWhiteboard();
         if (!snap) return "The whiteboard is empty. Ask them to sketch what they mean.";
-        return "They have drawn on the whiteboard; the examiner reads it together with what they say. Ask them to talk you through the drawing.";
+        const { markScheme, results } = actions.getRail();
+        const seen = markScheme ? boardNote(markScheme, results) : "";
+        return seen
+          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer.`
+          : "They have drawn on the whiteboard and the examiner is reading it now (within about 20 seconds). Acknowledge it in a few words, never ask them to repeat it aloud, and carry on.";
       },
     }),
     client.registerToolCallHandler(TOOL.generateVisualExplainer, {
@@ -136,7 +140,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         context: {
           topic: ctx.topic ?? markScheme?.topic,
           notesExcerpt: ctx.notesExcerpt,
-          criteria: markScheme?.criteria.map((c) => ({ id: c.id, title: c.title })),
+          criteria: markScheme?.criteria.map((c) => ({ id: c.id, title: c.title, probe: c.probe, ask: c.ask })),
         },
         registerTools: (c) => {
           const unregister = registerTools(c, actions);

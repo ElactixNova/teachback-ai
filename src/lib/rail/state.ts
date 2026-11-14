@@ -146,12 +146,20 @@ export function finalizeReport(scheme: MarkScheme, report: GapReport, live: Crit
     return { ...best, status, parked, attempts: lv?.attempts ?? 0 };
   });
 
-  let primary: string | null = null;
-  let worst = 0;
-  for (const c of scheme.criteria) {
-    const lost = c.marks - (results.find((r) => r.criterionId === c.id)?.awarded ?? 0);
-    if (lost > worst) [primary, worst] = [c.id, lost];
-  }
+  // Same rule as grade.ts primaryGap (kept local so this file stays free of server imports): the attempted
+  // criterion that lost the most marks; never-covered ones only count when nothing was attempted.
+  const biggest = (attemptedOnly: boolean) => {
+    let best: string | null = null;
+    let worst = 0;
+    for (const c of scheme.criteria) {
+      const r = results.find((x) => x.criterionId === c.id);
+      if (attemptedOnly && (!r || r.status === "not_covered")) continue;
+      const lost = c.marks - (r?.awarded ?? 0);
+      if (lost > worst) [best, worst] = [c.id, lost];
+    }
+    return best;
+  };
+  const primary = biggest(true) ?? biggest(false);
   const keepPrimary = report.primaryGapId && results.find((r) => r.criterionId === report.primaryGapId)?.status !== "full";
   return {
     ...report,
@@ -167,6 +175,22 @@ export function liveFocusId(results: CriterionResult[]): string | null {
   return results.find((r) => r.status === "in_progress")?.criterionId ?? null;
 }
 
+const MAX_BOARD_CHARS = 600;
+
+/**
+ * What the examiner saw on the whiteboard, so the avatar knows what is already drawn or written.
+ * Empty string when the board has been empty. Truncated: it goes into the avatar's context.
+ */
+export function boardNote(scheme: MarkScheme, results: CriterionResult[]): string {
+  const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
+  const seen = results
+    .filter((r) => r.boardObservation?.trim())
+    .map((r) => `${title(r.criterionId)}: ${r.boardObservation!.trim()}`)
+    .join(" | ");
+  if (!seen) return "";
+  return `On their whiteboard (you can see it through the examiner, so never ask them to say aloud what is already written or drawn there): ${seen.slice(0, MAX_BOARD_CHARS)}.`;
+}
+
 /** What the avatar gets back from get_rail_status: short, factual, no answers. */
 export function railStatusText(scheme: MarkScheme, results: CriterionResult[], focusIds: string[] = []): string {
   const { awarded, total } = railScore(scheme, results);
@@ -177,20 +201,50 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
   const open = (r: CriterionResult) => r.status !== "full" && r.status !== "parked";
   const focus = focusIds.map((id) => results.find((r) => r.criterionId === id)).filter((r): r is CriterionResult => !!r && open(r));
   const nextUp = focus[0] ?? results.find((r) => r.status === "not_covered") ?? results.find((r) => open(r) && r.status !== "in_progress");
+  const board = boardNote(scheme, results);
+  // Before moving on, probe the point they just explained if part of it is still missing (the active
+  // point first, else any other partly explained one that has not used its two tries).
+  const partly = (r: CriterionResult) => open(r) && r.missingSteps.length > 0 && r.attempts < 2 && r.status !== "not_covered" && (r.awarded > 0 || r.status === "in_progress");
+  const followUp = results.find((r) => r.criterionId === active && partly(r)) ?? results.find(partly);
+  const next = nextUp ? scheme.criteria.find((c) => c.id === nextUp.criterionId) : undefined;
+  const nextAsk = next?.probe
+    ? ` Ask it in your own words, keeping its specifics: "${next.probe}"${next.ask && next.ask !== "say" ? `, and have them ${next.ask} it on the board, then wait quietly` : ""}.`
+    : "";
   return [
     `Rail: ${awarded}/${total} marks so far.`,
+    board,
     `Fully explained: ${list(pick(["full"]))}.`,
     `Partly explained: ${list(pick(["partial", "missed"]))}.`,
     `Parked (do not ask about these again): ${list(pick(["parked"]))}.`,
     `Not covered yet: ${list(pick(["not_covered"]))}.`,
     active ? `They are explaining now: ${title(active)}.` : "",
     focus.length ? `They chose to work on: ${focus.map((r) => title(r.criterionId)).join("; ")}.` : "",
+    followUp
+      ? `FIRST, before moving on, follow up on "${title(followUp.criterionId)}": they have not yet made this point: "${followUp.missingSteps[0]}". Ask ONE short curious question that leads them towards it. Never state it. If they cannot, move on.`
+      : "",
     nextUp
-      ? `If they pause, ask one curious question that leads them to "${title(nextUp.criterionId)}". Never give the answer.`
+      ? `${followUp ? "After that" : "If they pause"}, move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
       : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
+    "Start your reply by reacting in a few words to what they just said.",
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+const words = (s: string) => new Set(s.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+
+/**
+ * True when the board observation appeared for the first time or changed substantially. The examiner
+ * rewords the same drawing on nearly every live tick, so a plain "!==" would fire a note each time and
+ * make the avatar chatty; get_rail_status always carries the latest observation anyway.
+ */
+function boardMoved(prev: string | undefined, next: string | undefined): boolean {
+  if (!next?.trim()) return false;
+  if (!prev?.trim()) return true;
+  const a = words(prev);
+  const b = words(next);
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared / Math.max(a.size, b.size, 1) < 0.5;
 }
 
 /**
@@ -202,7 +256,8 @@ export function railChangeNote(scheme: MarkScheme, before: CriterionResult[], af
   const was = (id: string) => before.find((r) => r.criterionId === id)?.status;
   const nowFull = after.filter((r) => r.status === "full" && was(r.criterionId) !== "full").map((r) => title(r.criterionId));
   const nowParked = after.filter((r) => r.status === "parked" && was(r.criterionId) !== "parked").map((r) => title(r.criterionId));
-  if (!nowFull.length && !nowParked.length) return null;
+  const boardChanged = after.some((r) => boardMoved(before.find((b) => b.criterionId === r.criterionId)?.boardObservation, r.boardObservation));
+  if (!nowFull.length && !nowParked.length && !boardChanged) return null;
   return [
     "[RAIL UPDATE, private, do not read out]",
     nowFull.length ? `Now fully explained: ${nowFull.join("; ")}. Do not ask about these again.` : "",
