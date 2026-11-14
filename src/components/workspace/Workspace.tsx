@@ -65,7 +65,11 @@ export function Workspace() {
   useEffect(() => () => {
     if (writingTimer.current) clearTimeout(writingTimer.current);
   }, []);
-  // Declared before the effects that use it (the React compiler lint rejects a ref used before its declaration).
+  const sessionStart = useRef<number | null>(null);
+
+  const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>("idle");
+  const [avatarDetail, setAvatarDetail] = useState<string | undefined>();
+  const [cue, setCue] = useState<Cue | null>(null);
   const sessionRef = useRef<AvatarSession | null>(null);
   // Tell the avatar (private context) when the student starts and stops writing; never on first render.
   const wroteBefore = useRef(false);
@@ -74,11 +78,6 @@ export function Workspace() {
     else if (!wroteBefore.current) return;
     sessionRef.current?.notifyBoard?.(writing ? "writing" : "idle");
   }, [writing]);
-  const sessionStart = useRef<number | null>(null);
-
-  const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>("idle");
-  const [avatarDetail, setAvatarDetail] = useState<string | undefined>();
-  const [cue, setCue] = useState<Cue | null>(null);
   const cueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [view, setView] = useState<WorkspaceView>("board");
