@@ -17,7 +17,8 @@ export type Speaker = "student" | "avatar";
 
 export interface TranscriptLine {
   id: string;
-  speaker: Speaker;
+  /** "system" lines (e.g. "Parked: …") are shown in the feed but never sent to the examiner. */
+  speaker: Speaker | "system";
   text: string;
   at: string; // ISO timestamp
   /** "mm:ss" from the start of the session (what the examiner cites). */
