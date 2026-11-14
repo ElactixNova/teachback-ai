@@ -15,7 +15,7 @@ const cache = new Map<string, string>();
 const CACHE_MAX = 500;
 
 /**
- * POST { texts: string[] } -> { texts: string[] }: each text with its maths wrapped in $...$ (LaTeX), for display
+ * POST { texts: string[] } -> { latex: string[], texts: string[] } (same array twice): each text with its maths wrapped in $...$ (LaTeX), for display
  * only. A text the model could not convert safely comes back unchanged, so the UI can always show the result.
  */
 export async function POST(req: Request) {
@@ -33,7 +33,9 @@ export async function POST(req: Request) {
         cache.set(t, converted[i]);
       });
     }
-    return NextResponse.json({ texts: texts.map((t) => cache.get(t) ?? t) });
+    const out = texts.map((t) => cache.get(t) ?? t);
+    // "latex" is what the T19 UI reads; "texts" is kept as an alias.
+    return NextResponse.json({ latex: out, texts: out });
   } catch (err) {
     console.error("to-latex failed", err);
     if (err instanceof Anthropic.RateLimitError) return fail(429, "The model is rate limited. Try again in a moment.");

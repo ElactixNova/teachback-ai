@@ -35,6 +35,13 @@ export interface AnamPersonaConfig {
 }
 
 const MAX_EXCERPT = 4000;
+const MAX_TOPIC = 200;
+
+/** A topic goes straight into Sam's prompt: collapse whitespace and cap the length (from Vince's #7). */
+export function cleanTopic(topic?: string): string | undefined {
+  const t = topic?.replace(/\s+/g, " ").trim().slice(0, MAX_TOPIC);
+  return t || undefined;
+}
 
 export function buildSystemPrompt(ctx: PersonaContext = {}): string {
   const topic = ctx.topic?.trim();
@@ -63,7 +70,7 @@ const MAX_CRITERIA = 12;
 
 /** Rail persona: a curious student whose questions follow the live mark scheme. */
 export function buildRailSystemPrompt(ctx: PersonaContext): string {
-  const topic = ctx.topic?.trim();
+  const topic = cleanTopic(ctx.topic);
   const excerpt = ctx.notesExcerpt?.trim().slice(0, MAX_EXCERPT);
   const points = (ctx.criteria ?? [])
     .slice(0, MAX_CRITERIA)
