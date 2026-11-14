@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Clock3, Frown, LoaderCircle, Mic, MicOff, PenLine, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
 import type { Cue } from "@/types/session";
 import { ANAM_VIDEO_ID, type AvatarStatus, type TranscriptLine } from "./types";
 import { SpokenMath } from "./MathText";
+import { cleanSamLine } from "./transcriptClean";
 
 /** Sam's mood badge (Figma: Mood Badge 5:77): always icon + words, never colour alone. */
 const CUE_STYLE: Record<Cue, { label: string; className: string; Icon: LucideIcon }> = {
@@ -66,6 +67,17 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
   };
 
   const cueStyle = cue ? CUE_STYLE[cue] : null;
+  // What the chat shows: Sam's lines without prompt markers or talk of the machinery (display only, the raw
+  // transcript is unchanged); a Sam line with nothing conversational left is hidden. Student lines as said.
+  const shown = useMemo(
+    () =>
+      transcript.flatMap((l) => {
+        if (l.speaker !== "avatar") return [{ ...l, display: l.text }];
+        const display = cleanSamLine(l.text);
+        return display ? [{ ...l, display }] : [];
+      }),
+    [transcript],
+  );
 
   return (
     <section aria-label="Your AI student" className="sheet flex min-h-0 flex-1 flex-col gap-3 p-3">
@@ -150,13 +162,13 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
       <div className="flex min-h-64 flex-1 flex-col overflow-hidden lg:min-h-0">
         <div className="flex items-center justify-between px-2 pb-1">
           <h2 className="text-base font-semibold tracking-[-0.01em]">Transcript</h2>
-          <span className="text-xs text-faint">{live ? "Sam is listening" : transcript.length ? `${transcript.filter((l) => l.speaker !== "system").length} lines` : "Not started"}</span>
+          <span className="text-xs text-faint">{live ? "Sam is listening" : transcript.length ? `${shown.filter((l) => l.speaker !== "system").length} lines` : "Not started"}</span>
         </div>
         <div ref={listRef} className="min-h-24 flex-1 space-y-2 overflow-y-auto px-2 py-2" aria-live="polite">
           {transcript.length === 0 ? (
             <p className="text-sm text-muted">Start the session and explain the idea to Sam in your own words. You can also type here.</p>
           ) : (
-            transcript.map((l) =>
+            shown.map((l) =>
               l.speaker === "system" ? (
                 <p key={l.id} className="flex items-center justify-center gap-1.5 text-center text-[11px] font-semibold text-parked">
                   <Clock3 className="h-3 w-3" /> {l.text}
@@ -170,7 +182,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
                     }`}
                   >
                     <span className={`mr-1.5 text-[10px] font-semibold tabular-nums ${l.speaker === "student" ? "text-white/70" : "text-faint"}`}>{l.t}</span>
-                    <SpokenMath text={l.text} />
+                    <SpokenMath text={l.display} />
                   </p>
                 </div>
               ),

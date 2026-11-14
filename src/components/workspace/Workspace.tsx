@@ -189,21 +189,8 @@ export function Workspace() {
     changeKey: `${studentLines}:${boardVersion}`,
   });
 
-  // Parked points show up in the conversation feed.
-  const parkedSeen = useRef(new Set<string>());
-  useEffect(() => {
-    if (!markScheme) {
-      parkedSeen.current = new Set();
-      return;
-    }
-    for (const r of results) {
-      if (r.parked && !parkedSeen.current.has(r.criterionId)) {
-        parkedSeen.current.add(r.criterionId);
-        const title = markScheme.criteria.find((c) => c.id === r.criterionId)?.title ?? r.criterionId;
-        addLine("system", `Parked: ${title}. Back to it later.`);
-      } else if (!r.parked) parkedSeen.current.delete(r.criterionId);
-    }
-  }, [results, markScheme, addLine]);
+  // (T24) Parked points used to add a "Parked: ... Back to it later." line to the chat. The chat is the
+  // conversation only: parking shows on the rail (Parked status) and the end screen, never in the feed.
 
   const parkCriterion = useCallback((id: string) => updateResults((prev) => parkResult(prev, id)), [updateResults]);
 
