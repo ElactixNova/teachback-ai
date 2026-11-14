@@ -1,72 +1,46 @@
-// Browser-side Anam integration (T2). Implements the AvatarBridge seam from
-// src/components/workspace/types.ts: session token from /api/anam-session, stream into the
-// <video>, register the 3 client tools against WorkspaceActions, forward transcript and
-// Director Notes cues through AvatarHandlers.
-import type { AnamClient, MessageStreamEvent } from "@anam-ai/js-sdk";
-import type { AnamSessionResponse, ApiError, LegacyGapReport } from "@/types/session";
-import type { AvatarBridge, AvatarHandlers, AvatarSession, Speaker, WorkspaceActions } from "@/components/workspace/types";
+// Browser-side Anam integration for the Mark Scheme Rail workspace (T2, T11).
+// Implements AvatarBridge from src/components/workspace/types.ts: the persona knows the mark-scheme
+// titles (never the answers), its client tools read and steer the live rail through WorkspaceActions,
+// and rail changes (full marks, parked) reach it as private context through Anam addContext.
+import type { AnamClient } from "@anam-ai/js-sdk";
+import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
+import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
+import { findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
-import { extractCues, toUiCue } from "./cues";
+import { connectAnam } from "./connect";
 import { TOOL } from "./tools";
 
-async function fetchSessionToken(ctx: PersonaContext): Promise<string> {
-  const res = await fetch("/api/anam-session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(ctx),
-  });
-  const body = (await res.json().catch(() => null)) as AnamSessionResponse | ApiError | null;
-  if (!res.ok || !body || !("sessionToken" in body)) {
-    throw new Error(body && "error" in body ? body.error : `Session route failed (${res.status})`);
-  }
-  return body.sessionToken;
+const arg = (p: { arguments?: Record<string, unknown> }, key: string) =>
+  typeof p.arguments?.[key] === "string" ? (p.arguments[key] as string).trim() : "";
+
+/** What the avatar is told about the final marking. Short, so it summarises instead of reading out. */
+export function summariseFinal(scheme: MarkScheme | null, r: GapReport): string {
+  const title = (id: string) => scheme?.criteria.find((c) => c.id === id)?.title ?? id;
+  const primary = r.results.find((x) => x.criterionId === r.primaryGapId);
+  const full = r.results.filter((x) => x.status === "full").map((x) => title(x.criterionId));
+  return [
+    `Their marked results are on screen now: ${r.awarded} out of ${r.total} marks.`,
+    full.length ? `Fully explained: ${full.join("; ")}.` : "",
+    primary
+      ? `Main point to work on: "${title(primary.criterionId)}"${
+          primary.missingSteps.length ? `; they missed: ${primary.missingSteps.slice(0, 3).join("; ")}` : ""
+        }.`
+      : "Nothing lost marks.",
+    "Tell them their mark and that one point in two short sentences, warmly, as their student. Do not read this out or add corrections of your own.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
-function summariseReport(r: LegacyGapReport): string {
-  const gaps = r.gaps.length
-    ? r.gaps.map((g) => `${g.concept} (${g.severity}): they said "${g.misconception}"; the notes say "${g.correction}"`).join("; ")
-    : "none";
-  return `Report is open on screen. Score ${r.score}/100. Summary: ${r.summary} Strengths: ${
-    r.strengths.join(", ") || "none"
-  }. Gaps: ${gaps}. Tell the student their score and the most important gap in one or two sentences, as a curious student would, without reading this out. Only talk about the gaps listed here; do not add corrections of your own.`;
-}
-
-const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-
-/**
- * Turn streamed message chunks into whole transcript lines, and surface cues as they arrive.
- * `typed` holds lines sent with sendText: the workspace already shows them, so their echo is skipped.
- */
-function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>) {
-  const buffers = new Map<string, { speaker: Speaker; text: string }>();
-  return (e: MessageStreamEvent) => {
-    const speaker: Speaker = String(e.role) === "user" ? "student" : "avatar";
-    const cue = toUiCue(e.cueTag);
-    if (cue) handlers.onCue(cue);
-
-    const buf = buffers.get(e.id) ?? { speaker, text: "" };
-    buf.text += e.content ?? "";
-    buffers.set(e.id, buf);
-
-    if (e.endOfSpeech || e.interrupted) {
-      buffers.delete(e.id);
-      const { clean, cues } = extractCues(buf.text);
-      cues.forEach(handlers.onCue);
-      if (buf.speaker === "student" && typed.delete(norm(clean))) return;
-      if (clean) handlers.onTranscript(buf.speaker, clean);
-    }
-  };
-}
-
-/** A check that finished this recently is reused instead of re-running the analysis. */
+/** A check that finished this recently is reused instead of marking again. */
 const RECENT_CHECK_MS = 20_000;
 
-function registerTools(client: AnamClient, actions: WorkspaceActions) {
-  // The LLM sometimes calls the check twice in a row ("I'm finished" ... "check my explanation").
-  // Share one in-flight check and reuse a fresh result, so we never pay for two analyses + visuals.
-  let inflight: Promise<LegacyGapReport | null> | null = null;
+function registerTools(client: AnamClient, actions: WorkspaceActions): () => void {
+  // The LLM sometimes calls the check twice in a row ("I'm finished" ... "check me").
+  // Share one in-flight final marking and reuse a fresh result, so we never pay twice.
+  let inflight: Promise<GapReport | null> | null = null;
   let lastCheckAt = 0;
-  const check = (): Promise<LegacyGapReport | null> => {
+  const check = (): Promise<GapReport | null> => {
     const fresh = actions.getReport();
     if (fresh && Date.now() - lastCheckAt < RECENT_CHECK_MS) {
       actions.openGapReport();
@@ -80,125 +54,122 @@ function registerTools(client: AnamClient, actions: WorkspaceActions) {
   };
 
   const unregister = [
-    client.registerToolCallHandler(TOOL.captureWhiteboard, {
+    client.registerToolCallHandler(TOOL.getRailStatus, {
       onStart: async () => {
-        const snap = actions.captureWhiteboard();
-        if (!snap) return "The whiteboard is empty. Ask the student to sketch what they mean.";
-        return `The student has drawn on the whiteboard (${snap.width}x${snap.height}). You cannot see details yet; it will be checked with ${TOOL.openGapReport}. Ask them to talk you through the drawing.`;
+        const { markScheme, results, focusIds } = actions.getRail();
+        if (!markScheme) return "There is no mark scheme yet. Ask the student what they want to teach you.";
+        return railStatusText(markScheme, results, focusIds);
+      },
+    }),
+    client.registerToolCallHandler(TOOL.parkCriterion, {
+      onStart: async (p) => {
+        const { markScheme } = actions.getRail();
+        const ref = arg(p, "criterion");
+        const c = markScheme && ref ? findCriterion(markScheme, ref) : undefined;
+        if (!c) return `There is no point called "${ref}" on the mark scheme. Carry on without parking.`;
+        actions.parkCriterion(c.id);
+        return `Parked "${c.title}". It will be in their report. Do not ask about it again; move on to another part of the topic.`;
       },
     }),
     client.registerToolCallHandler(TOOL.openGapReport, {
       onStart: async (p) => {
         const last = actions.getReport();
-        if (p.arguments?.reuse_last && last) {
+        if (p.arguments?.reuse_last === true && last) {
           actions.openGapReport();
-          return summariseReport(last);
+          return summariseFinal(actions.getRail().markScheme, last);
         }
         const report = await check();
-        if (!report) return "The check could not run: the student has not explained anything yet, or the check failed. Ask them to explain a bit more first.";
-        return summariseReport(report);
+        if (!report) return "There is nothing to mark yet: they have not explained or drawn anything, or marking failed. Ask them to explain a bit more first.";
+        return summariseFinal(actions.getRail().markScheme, report);
+      },
+    }),
+    client.registerToolCallHandler(TOOL.captureWhiteboard, {
+      onStart: async () => {
+        const snap = actions.captureWhiteboard();
+        if (!snap) return "The whiteboard is empty. Ask them to sketch what they mean.";
+        return "They have drawn on the whiteboard; the examiner reads it together with what they say. Ask them to talk you through the drawing.";
       },
     }),
     client.registerToolCallHandler(TOOL.generateVisualExplainer, {
       onStart: async (p) => {
-        let r = actions.getReport();
-        if (!r) {
-          // No report yet: run the check; the workspace then starts the visual for the top gap itself.
-          r = await check();
-          if (!r) return "The check could not run: the student has not explained anything yet. Ask them to explain a bit first.";
-          if (r.gaps.length === 0) return `${summariseReport(r)} There are no gaps, so no visual is needed.`;
-          return `${summariseReport(r)} A visual for the most important gap is being generated and will appear in the report in a few seconds.`;
+        const { markScheme } = actions.getRail();
+        const ref = arg(p, "criterion");
+        const c = markScheme && ref ? findCriterion(markScheme, ref) : undefined;
+        if (!actions.getReport() && !c) {
+          return "Pictures come with their results. Encourage them to keep explaining, or to say they are finished.";
         }
-        if (r.gaps.length === 0) return "The latest report has no gaps, so there is nothing to illustrate. Tell the student they did well.";
-        const wanted = typeof p.arguments?.concept === "string" ? p.arguments.concept.toLowerCase().trim() : "";
-        const gap = wanted
-          ? r.gaps.find((g) => g.concept.toLowerCase().includes(wanted) || wanted.includes(g.concept.toLowerCase()))
-          : undefined;
-        // Fire and forget: fal can take longer than the tool timeout; the drawer shows progress.
-        void actions.generateVisualExplainer(gap?.id);
-        return `Generating a visual for "${gap?.concept ?? "the most important gap"}". It will appear in the report in a few seconds. Tell the student to watch for it.`;
+        // Fire and forget: fal takes ~20 s, longer than the tool should block the conversation.
+        void actions.generateVisualExplainer(c?.id).catch(() => null);
+        return `A labelled diagram${c ? ` for "${c.title}"` : " for their main gap"} is being drawn and will appear on screen in about 20 seconds. Keep talking meanwhile.`;
       },
     }),
   ];
   return () => unregister.forEach((u) => u());
 }
 
-/** Create a bridge. `getContext` scopes the persona (topic + notes) at connect time. */
-export function createAnamAvatarBridge(getContext: () => PersonaContext = () => ({})): AvatarBridge {
+/** How often the bridge looks at the rail for changes worth telling the avatar about. */
+const WATCH_MS = 1500;
+
+/** Push full-marks/parked changes to the avatar as private context. */
+function watchRail(actions: WorkspaceActions, addContext: (text: string) => void): () => void {
+  let before: CriterionResult[] = actions.getRail().results;
+  const id = setInterval(() => {
+    const { markScheme, results, focusIds, view } = actions.getRail();
+    if (results === before) return;
+    const note = markScheme && view !== "summary" ? railChangeNote(markScheme, before, results, focusIds) : null;
+    before = results;
+    if (note) addContext(note);
+  }, WATCH_MS);
+  return () => clearInterval(id);
+}
+
+/** Create a bridge. `getContext` adds the topic and a notes excerpt; the mark-scheme titles come from the rail. */
+export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "criteria"> = () => ({})): AvatarBridge {
   return {
     async connect({ videoElementId, actions, handlers }): Promise<AvatarSession> {
-      handlers.onStatus("connecting");
-      let client: AnamClient | null = null;
-      let closedByUs = false;
-      let cleanupTools = () => {};
-      const typed = new Set<string>();
+      const { markScheme } = actions.getRail();
+      const ctx = getContext();
+      let stopWatch = () => {};
+      const session = await connectAnam({
+        videoElementId,
+        handlers,
+        context: {
+          topic: ctx.topic ?? markScheme?.topic,
+          notesExcerpt: ctx.notesExcerpt,
+          criteria: markScheme?.criteria.map((c) => ({ id: c.id, title: c.title })),
+        },
+        registerTools: (c) => {
+          const unregister = registerTools(c, actions);
+          return () => {
+            stopWatch();
+            unregister();
+          };
+        },
+      });
+      stopWatch = watchRail(actions, session.addContext);
 
-      // Anam keys allow few concurrent sessions: end ours when the tab closes or reloads,
-      // otherwise the next "Start session" hits "Concurrency limit reached" until it times out.
-      const onPageHide = () => void client?.stopStreaming().catch(() => {});
-      window.addEventListener("pagehide", onPageHide);
-
-      const disconnect = () => {
-        closedByUs = true;
-        window.removeEventListener("pagehide", onPageHide);
-        cleanupTools();
-        void client?.stopStreaming().catch(() => {});
-        client = null;
-        handlers.onStatus("idle");
+      return {
+        disconnect: () => {
+          stopWatch();
+          session.disconnect();
+        },
+        sendText: session.sendText,
+        setFocus: (criteria) => {
+          if (!criteria.length) {
+            session.addContext("[RAIL UPDATE, private, do not read out] The student wants to continue with the whole topic again.");
+            return;
+          }
+          const list = criteria
+            .map((c) => `"${c.title}"${c.missingSteps.length ? ` (still missing: ${c.missingSteps.slice(0, 3).join("; ")})` : ""}`)
+            .join("; ");
+          session.addContext(
+            `[RAIL UPDATE, private, do not read out] The student chose to work on: ${list}. Ask about these first, one at a time, with curious questions; never give the missing points away. Parked points are open again for this.`,
+          );
+        },
       };
-
-      try {
-        // Load the SDK in the browser only (it touches WebRTC and window at import time).
-        const { createClient, AnamEvent } = await import("@anam-ai/js-sdk");
-        const token = await fetchSessionToken(getContext());
-        const c = createClient(token);
-        client = c;
-
-        // Register listeners and tool handlers before streaming so nothing is missed.
-        c.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, createTranscriptCollector(handlers, typed));
-        c.addListener(AnamEvent.DIRECTOR_NOTE_CUE_APPLIED, (ev) => {
-          const cue = toUiCue(ev.cueTag);
-          if (cue) handlers.onCue(cue);
-        });
-        c.addListener(AnamEvent.VIDEO_PLAY_STARTED, () => handlers.onStatus("live"));
-        // Stay live without a mic: the video keeps playing and typed lines still reach the avatar.
-        c.addListener(AnamEvent.MIC_PERMISSION_DENIED, () =>
-          handlers.onStatus("live", "Microphone blocked. Type your explanation below."),
-        );
-        c.addListener(AnamEvent.CONNECTION_CLOSED, (reason, details) => {
-          cleanupTools();
-          if (closedByUs) return;
-          handlers.onStatus("error", `Session ended${details ? `: ${details}` : ` (${reason})`}.`);
-        });
-        c.addListener(AnamEvent.TOOL_CALL_FAILED, (ev) => console.warn("[anam] tool failed", ev.toolName, ev.errorMessage));
-
-        cleanupTools = registerTools(c, actions);
-
-        await c.streamToVideoElement(videoElementId);
-        if (!closedByUs) handlers.onStatus("live");
-      } catch (e) {
-        window.removeEventListener("pagehide", onPageHide);
-        cleanupTools();
-        void client?.stopStreaming().catch(() => {});
-        client = null;
-        handlers.onStatus("error", e instanceof Error ? e.message : "Could not start the avatar.");
-      }
-
-      const sendText = (text: string) => {
-        if (!client?.isStreaming()) return;
-        typed.add(norm(text));
-        try {
-          client.sendUserMessage(text);
-        } catch (e) {
-          typed.delete(norm(text));
-          console.warn("[anam] sendUserMessage failed", e);
-        }
-      };
-
-      return { disconnect, sendText };
     },
   };
 }
 
-/** Default bridge with a generic persona (no topic). */
+/** Default bridge (topic from the mark scheme, no notes excerpt). */
 export const anamAvatarBridge = createAnamAvatarBridge();

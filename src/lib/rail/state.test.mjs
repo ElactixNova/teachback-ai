@@ -1,0 +1,144 @@
+// Run: node --test src/lib/rail/state.test.mjs
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { emptyResults, finalizeReport, findCriterion, initialRail, liveFocusId, mergeLive, mergeLiveResults, mmss, parkResult, railChangeNote, railStatusText, toTimedLines } from "./state.ts";
+
+const scheme = {
+  topic: "Photosynthesis",
+  sourceFile: "n.pdf",
+  pages: "pp. 1-2",
+  totalMarks: 5,
+  criteria: [
+    { id: "c1", title: "Inputs and outputs", expected: ["CO2", "water", "glucose"], marks: 3, source: { page: 1 } },
+    { id: "c2", title: "Where it happens", expected: ["leaves", "chloroplasts"], marks: 2, source: { page: 1 } },
+  ],
+};
+const r = (criterionId, status, awarded, quote, timestamp) => ({
+  criterionId, status, awarded, missingSteps: [], attempts: 0, parked: false,
+  ...(quote ? { evidence: { quote, timestamp } } : {}),
+});
+
+test("initial rail is all not_covered", () => {
+  const s = initialRail(scheme);
+  assert.deepEqual(s.results.map((x) => x.status), ["not_covered", "not_covered"]);
+  assert.equal(s.results[1].missingSteps.length, 2);
+});
+
+test("marks never go down and full sticks", () => {
+  let s = initialRail(scheme);
+  s = mergeLive(scheme, s, [r("c1", "partial", 2, "carbon dioxide and water", "00:10")]);
+  s = mergeLive(scheme, s, [r("c1", "partial", 1, "carbon dioxide and water", "00:10")]);
+  assert.equal(s.results[0].awarded, 2);
+  s = mergeLive(scheme, s, [r("c1", "full", 3, "and it makes glucose", "00:40")]);
+  s = mergeLive(scheme, s, [r("c1", "missed", 0, "something", "00:50")]);
+  assert.equal(s.results[0].status, "full");
+  assert.equal(s.results[0].awarded, 3);
+});
+
+test("one explanation over several sentences is one attempt; two spaced failures park", () => {
+  let s = initialRail(scheme);
+  s = mergeLive(scheme, s, [r("c2", "missed", 0, "glucose is made in the roots", "00:20")]);
+  s = mergeLive(scheme, s, [r("c2", "missed", 0, "the light goes to the roots", "00:25")]);
+  assert.equal(s.results[1].attempts, 1);
+  assert.equal(s.results[1].parked, false);
+  s = mergeLive(scheme, s, [r("c2", "partial", 1, "maybe in the stem and leaves", "01:10")]);
+  assert.equal(s.results[1].attempts, 2);
+  assert.equal(s.results[1].status, "parked");
+  assert.equal(s.results[1].awarded, 1);
+  // Getting it right later un-parks it.
+  s = mergeLive(scheme, s, [r("c2", "full", 2, "in chloroplasts in the leaves", "02:00")]);
+  assert.equal(s.results[1].status, "full");
+  assert.equal(s.results[1].parked, false);
+});
+
+test("activeId: model's in_progress, else newest open quote; in_progress is not stored", () => {
+  let s = initialRail(scheme);
+  s = mergeLive(scheme, s, [r("c1", "partial", 1, "co2", "00:10"), r("c2", "in_progress", 0, "it happens in", "00:30")]);
+  assert.equal(s.activeId, "c2");
+  assert.equal(s.results[1].status, "not_covered");
+  s = mergeLive(scheme, s, [r("c1", "partial", 1, "co2 and water", "00:50"), r("c2", "missed", 0, "it happens in", "00:30")], []);
+  assert.equal(s.activeId, "c1");
+  assert.equal(s.results[0].attempts, 1); // no avatar turn in between: still the same attempt
+});
+
+test("park, find by title, status text and change note", () => {
+  const before = emptyResults(scheme);
+  assert.equal(findCriterion(scheme, "where it happens")?.id, "c2");
+  assert.equal(findCriterion(scheme, "C1")?.id, "c1");
+  assert.equal(findCriterion(scheme, "nonsense"), undefined);
+  const after = parkResult(before, "c2");
+  assert.equal(after[1].status, "parked");
+  assert.match(railChangeNote(scheme, before, after), /Parked: Where it happens/);
+  assert.equal(railChangeNote(scheme, after, after), null);
+  const text = railStatusText(scheme, after);
+  assert.match(text, /0\/5 marks/);
+  assert.match(text, /Parked \(do not ask about these again\): Where it happens/);
+  assert.match(text, /leads them to "Inputs and outputs"/);
+  assert.match(railStatusText(scheme, before, ["c2"]), /chose to work on: Where it happens.*leads them to "Where it happens"/);
+});
+
+test("finalizeReport keeps the better mark, attempts and parking, and recomputes totals", () => {
+  let live = mergeLiveResults(scheme, emptyResults(scheme), [r("c1", "partial", 2, "co2 and water", "00:10")], []);
+  live = parkResult(live, "c2");
+  const report = {
+    awarded: 1, total: 5, primaryGapId: "c1", studyPlan: [],
+    results: [r("c1", "partial", 1, "co2", "00:10"), r("c2", "missed", 0, "roots", "00:30")],
+  };
+  const out = finalizeReport(scheme, report, live);
+  assert.equal(out.awarded, 2);
+  assert.equal(out.results[0].awarded, 2);
+  assert.equal(out.results[0].status, "partial");
+  assert.equal(out.results[1].status, "parked");
+  assert.equal(out.results[1].parked, true);
+  assert.equal(out.results[1].attempts, 1);
+  assert.equal(out.primaryGapId, "c1");
+});
+
+test("mergeLiveResults: in_progress shown, history kept across calls, manual park respected", () => {
+  const t = [
+    { speaker: "student", text: "glucose is made in the roots", t: "00:20" },
+    { speaker: "avatar", text: "Where does the light land?", t: "00:30" },
+    { speaker: "student", text: "in the stem", t: "00:40" },
+  ];
+  let res = mergeLiveResults(scheme, emptyResults(scheme), [r("c2", "missed", 0, "glucose is made in the roots", "00:20")], t.slice(0, 1));
+  assert.equal(liveFocusId(res), "c2");
+  assert.equal(res[1].status, "in_progress");
+  assert.equal(res[1].attempts, 1);
+  // The UI keeps the array; a new analysis with the retry parks it.
+  res = mergeLiveResults(scheme, res, [r("c2", "missed", 0, "in the stem", "00:40")], t);
+  assert.equal(res[1].status, "parked");
+  assert.equal(liveFocusId(res), null);
+  // A manual park made by the UI survives the next merge.
+  res = parkResult(res, "c1");
+  res = mergeLiveResults(scheme, res, [r("c1", "partial", 1, "co2", "00:50")], t);
+  assert.equal(res[0].status, "parked");
+  assert.equal(res[0].awarded, 1);
+  // A reset (empty results) starts the history again.
+  res = mergeLiveResults(scheme, emptyResults(scheme), [r("c2", "missed", 0, "in the stem", "00:40")], t);
+  assert.equal(res[1].attempts, 1);
+});
+
+test("with a transcript, a retry needs an avatar turn in between", () => {
+  const t = [
+    { speaker: "student", text: "glucose is made in the roots", t: "00:20" },
+    { speaker: "student", text: "the light goes to the roots", t: "00:25" },
+    { speaker: "avatar", text: "Hmm, where do you think the light lands?", t: "00:30" },
+    { speaker: "student", text: "maybe the stem", t: "00:35" },
+  ];
+  let s = initialRail(scheme);
+  s = mergeLive(scheme, s, [r("c2", "missed", 0, "glucose is made in the roots", "00:20")], t.slice(0, 1));
+  s = mergeLive(scheme, s, [r("c2", "missed", 0, "the light goes to the roots", "00:25")], t.slice(0, 2));
+  assert.equal(s.results[1].attempts, 1);
+  s = mergeLive(scheme, s, [r("c2", "missed", 0, "maybe the stem", "00:35")], t);
+  assert.equal(s.results[1].attempts, 2);
+  assert.equal(s.results[1].status, "parked");
+});
+
+test("time helpers", () => {
+  assert.equal(mmss(65_400), "01:05");
+  const start = Date.parse("2026-11-14T18:00:00Z");
+  assert.deepEqual(
+    toTimedLines([{ speaker: "student", text: "hi", at: "2026-11-14T18:01:02Z" }, { speaker: "avatar", text: " ", at: "2026-11-14T18:01:03Z" }], start),
+    [{ speaker: "student", text: "hi", t: "01:02" }],
+  );
+});

@@ -1,10 +1,13 @@
 // Thin typed fetch helpers for the workspace UI. All keys stay in the server routes.
 import type {
-  LegacyAnalyzeRequest,
+  AnalyzeRequest,
   ApiError,
   CurriculumContext,
-  LegacyGapReport,
-  LegacyKnowledgeGap,
+  GapReport,
+  MarkScheme,
+  MarkSchemeRequest,
+  RevisionNote,
+  RevisionNotesRequest,
   VisualExplainer,
   VisualRequest,
 } from "@/types/session";
@@ -19,39 +22,34 @@ async function readJson<T>(res: Response): Promise<T> {
   return body as T;
 }
 
+const postJson = async <T>(url: string, body: unknown, signal?: AbortSignal): Promise<T> =>
+  readJson<T>(
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    }),
+  );
+
 export async function parsePdf(file: File): Promise<CurriculumContext> {
   const form = new FormData();
   form.append("file", file);
   return readJson<CurriculumContext>(await fetch("/api/parse-pdf", { method: "POST", body: form }));
 }
 
-export async function analyze(req: LegacyAnalyzeRequest): Promise<LegacyGapReport> {
-  return readJson<LegacyGapReport>(
-    await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
-    }),
-  );
-}
+export const fetchMarkScheme = (req: MarkSchemeRequest) => postJson<MarkScheme>("/api/mark-scheme", req);
 
-export function visualRequestFor(gap: LegacyKnowledgeGap, topic?: string): VisualRequest {
-  return {
-    concept: gap.concept,
-    misconception: gap.misconception,
-    visualPrompt:
-      `Clean educational explainer diagram${topic ? ` for ${topic}` : ""} showing "${gap.concept}". ` +
-      `Correct idea: ${gap.correction}. Make clear why this is wrong: ${gap.misconception}. ` +
-      `Minimal, labelled, whiteboard style, high contrast, no clutter.`,
-  };
-}
+export const analyzeFinal = (req: Omit<AnalyzeRequest, "mode">) => postJson<GapReport>("/api/analyze", { ...req, mode: "final" });
 
-export async function generateVisual(req: VisualRequest): Promise<VisualExplainer> {
-  return readJson<VisualExplainer>(
-    await fetch("/api/generate-visual", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
-    }),
-  );
+export const fetchRevisionNotes = (req: RevisionNotesRequest) => postJson<RevisionNote[]>("/api/revision-notes", req);
+
+export const generateVisual = (req: VisualRequest) => postJson<VisualExplainer>("/api/generate-visual", req);
+
+/** SVG markup as an <img> source (never inject it into the DOM). */
+export function svgDataUri(svg: string): string {
+  const bytes = new TextEncoder().encode(svg);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return `data:image/svg+xml;base64,${btoa(bin)}`;
 }

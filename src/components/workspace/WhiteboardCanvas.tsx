@@ -22,7 +22,7 @@ export interface WhiteboardHandle {
 }
 
 const INKS = [
-  { name: "Ink", value: "#1c1917" },
+  { name: "Ink", value: "#12201f" },
   { name: "Blue", value: "#2563eb" },
   { name: "Red", value: "#dc2626" },
   { name: "Green", value: "#15803d" },
@@ -66,10 +66,12 @@ interface Props {
   checking: boolean;
   /** Called whenever the board goes from empty to non-empty or back. */
   onEmptyChange?: (empty: boolean) => void;
+  /** Called after every committed change (stroke, undo, clear) with a counter, so callers can re-mark. */
+  onChange?: (version: number) => void;
 }
 
 export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function WhiteboardCanvas(
-  { onSnapAndCheck, checking, onEmptyChange },
+  { onSnapAndCheck, checking, onEmptyChange, onChange },
   ref,
 ) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   const [ink, setInk] = useState(INKS[0].value);
   const [penWidth, setPenWidth] = useState(3);
   const [count, setCount] = useState(0); // number of committed strokes, drives UI state
+  const [version, setVersion] = useState(0); // bumps on every committed change
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -102,6 +105,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     if (!wrap || !canvas) return;
     const ro = new ResizeObserver(() => {
       const rect = wrap.getBoundingClientRect();
+      // Hidden (display:none while the notes are shown): keep the backing store and strokes as they are.
+      if (rect.width < 1 || rect.height < 1) return;
       const dpr = window.devicePixelRatio || 1;
       size.current = { w: rect.width, h: rect.height, dpr };
       canvas.width = Math.max(1, Math.round(rect.width * dpr));
@@ -117,7 +122,14 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     onEmptyChange?.(!hasInk);
   }, [hasInk, onEmptyChange]);
 
-  const commit = () => setCount(strokes.current.length);
+  const commit = () => {
+    setCount(strokes.current.length);
+    setVersion((v) => v + 1);
+  };
+
+  useEffect(() => {
+    if (version > 0) onChange?.(version);
+  }, [version, onChange]);
 
   const pointFrom = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -217,13 +229,13 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   );
 
   const toolBtn = (active: boolean) =>
-    `inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-      active ? "bg-stone-900 text-white" : "text-stone-600 hover:bg-stone-100"
+    `inline-flex h-11 w-11 items-center justify-center rounded-lg transition-colors ${
+      active ? "bg-accent text-white" : "text-muted hover:bg-canvas"
     }`;
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 border-b border-stone-200 px-3 py-2">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-card">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-1.5">
         <div className="flex items-center gap-1" role="toolbar" aria-label="Whiteboard tools">
           <button type="button" className={toolBtn(tool === "pen")} onClick={() => setTool("pen")} title="Pen" aria-pressed={tool === "pen"}>
             <Pen className="h-4 w-4" />
@@ -239,7 +251,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           </button>
         </div>
 
-        <div className="mx-1 h-6 w-px bg-stone-200" />
+        <div className="mx-1 h-6 w-px bg-line" />
 
         <div className="flex items-center gap-1.5">
           {INKS.map((c) => (
@@ -254,14 +266,14 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
                 setTool("pen");
               }}
               className={`h-6 w-6 rounded-full ring-offset-2 transition ${
-                ink === c.value && tool === "pen" ? "ring-2 ring-stone-900" : "hover:scale-110"
+                ink === c.value && tool === "pen" ? "ring-2 ring-accent" : "hover:scale-110"
               }`}
               style={{ backgroundColor: c.value }}
             />
           ))}
         </div>
 
-        <div className="mx-1 h-6 w-px bg-stone-200" />
+        <div className="mx-1 h-6 w-px bg-line" />
 
         <div className="flex items-center gap-1">
           {[2, 4, 7].map((w) => (
@@ -281,7 +293,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           ))}
         </div>
 
-        <div className="mx-1 h-6 w-px bg-stone-200" />
+        <div className="mx-1 h-6 w-px bg-line" />
 
         <button type="button" className={toolBtn(false)} onClick={undo} disabled={!hasInk} title="Undo (Ctrl+Z)">
           <Undo2 className="h-4 w-4" />
@@ -294,7 +306,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           type="button"
           onClick={onSnapAndCheck}
           disabled={checking}
-          className="ml-auto inline-flex h-9 items-center gap-2 rounded-lg bg-amber-500 px-3.5 text-sm font-semibold text-stone-950 shadow-sm transition hover:bg-amber-400 disabled:cursor-wait disabled:opacity-70"
+          className="ml-auto inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-bold text-white transition hover:bg-accent-strong disabled:cursor-wait disabled:opacity-70"
         >
           {checking ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
           {checking ? "Checking…" : "Snap & Check"}
@@ -305,7 +317,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         ref={wrapRef}
         className="relative min-h-0 flex-1 bg-white"
         style={{
-          backgroundImage: "radial-gradient(circle, #e7e5e4 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(circle, #dde5e4 1px, transparent 1px)",
           backgroundSize: "22px 22px",
         }}
       >
@@ -319,7 +331,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           aria-label="Whiteboard drawing area"
         />
         {!hasInk && (
-          <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-stone-400">
+          <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-faint">
             Sketch your diagram or equations here while you explain.
           </p>
         )}
