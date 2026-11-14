@@ -22,12 +22,29 @@ export interface WhiteboardHandle {
 }
 
 const INKS = [
-  { name: "Black", value: "#14142b" },
-  { name: "Indigo", value: "#5b5ce6" },
-  { name: "Pink", value: "#ec4899" },
-  { name: "Green", value: "#10a36b" },
+  { name: "Black", value: "#111827" },
+  { name: "Blue", value: "#2563eb" },
+  { name: "Red", value: "#dc2626" },
+  { name: "Green", value: "#16a34a" },
 ];
 const ERASER_WIDTH = 28;
+
+/** Board background. Display only: the PNG sent to the examiner is always plain white. */
+type Paper = "plain" | "grid" | "dots";
+const PAPERS: { id: Paper; label: string }[] = [
+  { id: "plain", label: "Plain" },
+  { id: "grid", label: "Grid" },
+  { id: "dots", label: "Dots" },
+];
+const PAPER_STYLE: Record<Paper, React.CSSProperties> = {
+  plain: {},
+  grid: {
+    backgroundImage: "linear-gradient(#e2e3f6 1px, transparent 1px), linear-gradient(90deg, #e2e3f6 1px, transparent 1px)",
+    backgroundSize: "24px 24px",
+  },
+  dots: { backgroundImage: "radial-gradient(circle, #a9abd9 1px, transparent 1.2px)", backgroundSize: "24px 24px" },
+};
+const PAPER_KEY = "feynman.board.paper";
 /** Longest edge of the exported PNG, to keep the analyze payload small. */
 const MAX_EXPORT_EDGE = 1280;
 
@@ -83,6 +100,20 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
   const [ink, setInk] = useState(INKS[0].value);
   const [penWidth, setPenWidth] = useState(3);
+  const [paper, setPaperState] = useState<Paper>("dots");
+  // Remember the viewer's choice (best effort: storage can be blocked).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PAPER_KEY);
+      if (saved === "plain" || saved === "grid" || saved === "dots") setPaperState(saved);
+    } catch {}
+  }, []);
+  const setPaper = (p: Paper) => {
+    setPaperState(p);
+    try {
+      localStorage.setItem(PAPER_KEY, p);
+    } catch {}
+  };
   const [count, setCount] = useState(0); // number of committed strokes, drives UI state
   const [version, setVersion] = useState(0); // bumps on every committed change
 
@@ -239,10 +270,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       <div
         ref={wrapRef}
         className="relative min-h-0 flex-1 bg-white"
-        style={{
-          backgroundImage: "radial-gradient(circle, #a9abd9 1px, transparent 1.2px)",
-          backgroundSize: "24px 24px",
-        }}
+        style={PAPER_STYLE[paper]}
       >
         {/* Red margin rule (Figma: Whiteboard Canvas 14:319). */}
         <div className="pointer-events-none absolute inset-y-0 left-14 w-px bg-[#f2a7a7]" aria-hidden />
@@ -317,10 +345,26 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
 
         {/* Bottom row: label + state on the left, Snap & Check (Figma 29:508) on the right. */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 pl-[72px]">
-          <p className="flex items-baseline gap-2">
+          <div className="flex min-w-0 flex-col items-start gap-2">
+          <p className="flex items-baseline gap-2 whitespace-nowrap">
             <span className="text-base font-semibold tracking-[-0.01em]">Whiteboard</span>
             <span className="text-xs text-faint">{checking ? "Checking" : hasInk ? "In use" : "Empty"}</span>
           </p>
+          <div role="radiogroup" aria-label="Board background" className="pointer-events-auto order-first inline-flex rounded-full border border-line bg-card/95 p-0.5 shadow-[var(--shadow-1)]">
+            {PAPERS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={paper === p.id}
+                onClick={() => setPaper(p.id)}
+                className={`h-8 rounded-full px-3 text-xs font-semibold transition-colors ${paper === p.id ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          </div>
           <button
             type="button"
             onClick={onSnapAndCheck}
@@ -329,8 +373,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
           >
             {checking ? <LoaderCircle className="h-5 w-5 shrink-0 animate-spin" /> : <ScanSearch className="h-5 w-5 shrink-0" />}
             <span className="leading-tight">
-              <span className="block text-base font-semibold">{checking ? "Checking…" : "Snap & Check"}</span>
-              <span className="block text-xs text-white/80">{checking ? "Comparing with your mark scheme" : "Board + transcript vs your mark scheme"}</span>
+              <span className="block whitespace-nowrap text-base font-semibold">{checking ? "Checking…" : "Snap & Check"}</span>
+              <span className="block whitespace-nowrap text-xs text-white/80">{checking ? "Comparing with your mark scheme" : "Board + transcript vs your mark scheme"}</span>
             </span>
           </button>
         </div>
