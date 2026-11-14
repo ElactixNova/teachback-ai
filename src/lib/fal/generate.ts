@@ -7,7 +7,7 @@ export const VIDEO_MODEL = "fal-ai/ltx-2.3/text-to-video/fast";
 export const IMAGE_MODEL = "fal-ai/flux/schnell";
 
 /** Video gets this long before we serve the (already generating) image instead. */
-export const VIDEO_BUDGET_MS = 10_000;
+export const VIDEO_BUDGET_MS = Number(process.env.FAL_VIDEO_BUDGET_MS) || 10_000;
 /** Hard cap for the image call so the route never hangs. */
 const IMAGE_TIMEOUT_MS = 30_000;
 
