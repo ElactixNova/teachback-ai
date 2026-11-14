@@ -14,6 +14,7 @@ import {
   ANAM_VIDEO_ID,
   SEVERITY_RANK,
   type AvatarHandlers,
+  type AvatarSession,
   type AvatarStatus,
   type CheckStatus,
   type Speaker,
@@ -43,7 +44,7 @@ export function Workspace() {
   const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>("idle");
   const [avatarDetail, setAvatarDetail] = useState<string | undefined>();
   const [cue, setCue] = useState<Cue | null>(null);
-  const sessionRef = useRef<{ disconnect: () => void } | null>(null);
+  const sessionRef = useRef<AvatarSession | null>(null);
   const cueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [report, setReport] = useState<GapReport | null>(null);
@@ -117,6 +118,7 @@ export function Workspace() {
       checkExplanation,
       openGapReport: () => setDrawerOpen(true),
       generateVisualExplainer,
+      getReport: () => latest.current.report,
     }),
     [checkExplanation, generateVisualExplainer],
   );
@@ -226,7 +228,11 @@ export function Workspace() {
             transcript={transcript}
             onConnect={() => void connect()}
             onDisconnect={disconnect}
-            onTypedLine={(text) => handlers.onTranscript("student", text)}
+            onTypedLine={(text) => {
+              handlers.onTranscript("student", text);
+              // When the avatar is live, it hears typed lines too.
+              if (avatarStatus === "live") sessionRef.current?.sendText?.(text);
+            }}
           />
         </div>
         <div className="h-[480px] shrink-0 lg:h-auto lg:min-h-0 lg:shrink">

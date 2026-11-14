@@ -30,6 +30,18 @@ export interface WorkspaceActions {
   openGapReport: () => void;
   /** Generate a fal visual for a gap (default: the most severe gap of the latest report). */
   generateVisualExplainer: (gapId?: string) => Promise<VisualExplainer | null>;
+  /** The report currently shown (from Snap & Check or the avatar), or null. Read this; don't cache it. */
+  getReport: () => GapReport | null;
+}
+
+/** A live avatar session returned by AvatarBridge.connect. */
+export interface AvatarSession {
+  disconnect: () => void;
+  /**
+   * Send typed text to the avatar as if the student said it (Anam: client.sendUserMessage).
+   * The workspace already adds the line to the transcript, so the bridge must not echo it via onTranscript.
+   */
+  sendText?: (text: string) => void;
 }
 
 /** Callbacks the avatar integration uses to push state into the UI. */
@@ -49,7 +61,7 @@ export interface AvatarBridge {
     videoElementId: string;
     actions: WorkspaceActions;
     handlers: AvatarHandlers;
-  }) => Promise<{ disconnect: () => void }>;
+  }) => Promise<AvatarSession>;
 }
 
 export type VisualState =
