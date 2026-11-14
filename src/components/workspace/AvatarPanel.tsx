@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Clock3, Frown, LoaderCircle, Mic, MicOff, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
+import { ArrowRight, Clock3, Frown, LoaderCircle, Mic, MicOff, PenLine, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
 import type { Cue } from "@/types/session";
 import { ANAM_VIDEO_ID, type AvatarStatus, type TranscriptLine } from "./types";
 
@@ -27,9 +27,11 @@ interface Props {
   onTypedLine: (text: string) => void;
   /** Extra content under the video (e.g. the end-screen "Try it now" card). */
   children?: React.ReactNode;
+  /** The student is writing or drawing on the board right now: Sam waits quietly (persona rule), and the UI says so. */
+  waiting?: boolean;
 }
 
-export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, onDisconnect, onTypedLine, children }: Props) {
+export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, onDisconnect, onTypedLine, children, waiting = false }: Props) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const live = status === "live";
@@ -90,8 +92,8 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
             {live ? "LIVE" : status === "connecting" ? "Connecting" : "Offline"}
           </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white/90 backdrop-blur">
-            {live && !micBlocked ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-            {live && !micBlocked ? "Listening" : "Mic off"}
+            {live && waiting ? <PenLine className="h-3 w-3" /> : live && !micBlocked ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+            {live && waiting ? "Waiting while you write" : live && !micBlocked ? "Listening" : "Mic off"}
           </span>
         </div>
 
