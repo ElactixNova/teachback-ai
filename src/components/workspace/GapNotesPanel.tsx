@@ -6,7 +6,8 @@ import { MarksPill, SEVERITY, ScoreRing, SeverityTag, SourceChip, StatusIcon, WO
 import type { VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
 import { AskChip, MissedCallout } from "./callouts";
-import { MathText, SpokenMath } from "./MathText";
+import { MathText } from "./MathText";
+import { WhatYouSaid } from "./WhatYouSaid";
 import { plainMath } from "./math";
 
 export type CheckState = { status: "idle" } | { status: "checking" } | { status: "error"; error: string };
@@ -97,16 +98,7 @@ function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; prim
       </header>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl bg-canvas p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-            What you said{r.evidence ? ` · ${r.evidence.timestamp}` : ""}
-          </p>
-          {r.evidence ? (
-            <blockquote className="mt-1.5 text-[15px] italic leading-6">“<SpokenMath text={r.evidence.quote} />”</blockquote>
-          ) : (
-            <p className="mt-1.5 text-sm italic text-muted">You didn’t say anything about this.</p>
-          )}
-        </div>
+        <WhatYouSaid result={r} />
         <div className="rounded-xl bg-canvas p-3">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">What the mark scheme wants</p>
           <ul className="mt-1.5 space-y-1 text-sm leading-relaxed">
