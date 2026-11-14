@@ -201,3 +201,12 @@ test("sweep: once every point is touched, missed and partly explained points eac
   // Parked points are never swept.
   assert.doesNotMatch(railStatusText(scheme, parkResult(parkResult(touched, "c1"), "c2")), /SWEEP/);
 });
+
+test("said: live merges keep the summary, and the final report's summary wins", () => {
+  const withSaid = (said) => ({ ...r("c1", "partial", 1), said });
+  const merged = mergeLiveResults(scheme, [withSaid("You said A.")], [r("c1", "partial", 1)], []);
+  assert.equal(merged.find((x) => x.criterionId === "c1").said, "You said A.");
+  const report = { awarded: 1, total: 5, primaryGapId: "c1", results: [withSaid("You said A and then B."), r("c2", "not_covered", 0)], studyPlan: [] };
+  const fin = finalizeReport(scheme, report, [withSaid("You said A."), r("c2", "not_covered", 0)]);
+  assert.equal(fin.results.find((x) => x.criterionId === "c1").said, "You said A and then B.");
+});

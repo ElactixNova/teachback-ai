@@ -104,6 +104,12 @@ export interface CriterionResult {
   awarded: number;
   /** The student's exact words from the transcript. Never invented. */
   evidence?: { quote: string; timestamp: string };
+  /**
+   * A short second-person summary of everything the student said or wrote about this criterion over the whole
+   * session (mistakes and corrections included), e.g. "You said light and water make glucose, then corrected
+   * yourself about the roots." May contain $...$ LaTeX. Absent when they never addressed the point.
+   */
+  said?: string;
   /** What the whiteboard snapshot shows or lacks. */
   boardObservation?: string;
   /** True when the board looks unfinished (cut-off equation, half-drawn diagram): the student is probably midway or thinking. */

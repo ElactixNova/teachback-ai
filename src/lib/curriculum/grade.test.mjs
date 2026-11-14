@@ -92,3 +92,9 @@ test("back-references are never shown as 'What you said'", () => {
   assert.equal(isBackReference("Plants take in CO2 and water and use light to make glucose."), false);
   assert.equal(isBackReference("Chlorophyll absorbs light that is already available"), true); // 'already' alone is enough: drop rather than risk a wrong quote
 });
+
+test("said: the summary of what the student said passes through, trimmed, never for a point they never addressed", () => {
+  const res = gradeAll(scheme, [raw({ said: "  You said plants use CO2 and water, then corrected the roots.  " }), raw({ criterionId: "c2", status: "not_covered", awarded: 0, missingSteps: [], said: "You said something" })], transcript, "final");
+  assert.equal(res[0].said, "You said plants use CO2 and water, then corrected the roots.");
+  assert.equal(res[1].said, undefined);
+});

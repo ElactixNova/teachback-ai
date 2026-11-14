@@ -95,8 +95,8 @@ export function mergeLive(scheme: MarkScheme, state: RailState, incoming: Criter
 
     const better = next.awarded > prev.awarded || (next.awarded === prev.awarded && prev.status === "not_covered" && next.status !== "not_covered");
     const base: CriterionResult = better
-      ? { ...next, awarded: Math.min(next.awarded, c.marks) }
-      : { ...prev, boardObservation: next.boardObservation ?? prev.boardObservation, boardUnfinished: next.boardUnfinished ?? prev.boardUnfinished };
+      ? { ...next, awarded: Math.min(next.awarded, c.marks), said: next.said ?? prev.said }
+      : { ...prev, boardObservation: next.boardObservation ?? prev.boardObservation, boardUnfinished: next.boardUnfinished ?? prev.boardUnfinished, said: next.said ?? prev.said };
     // Live "in_progress" is not a stored status: it is reported through activeId.
     if (base.status === "in_progress") base.status = base.awarded > 0 ? "partial" : prev.status === "not_covered" ? "not_covered" : prev.status;
 
@@ -143,7 +143,9 @@ export function finalizeReport(scheme: MarkScheme, report: GapReport, live: Crit
     const parked = !!lv?.parked && best.awarded < c.marks;
     const status: CriterionStatus =
       best.awarded >= c.marks ? "full" : parked ? "parked" : best.status === "in_progress" ? (best.awarded > 0 ? "partial" : "missed") : best.status;
-    return { ...best, status, parked, attempts: lv?.attempts ?? 0 };
+    // The final marking reads the whole transcript, so its summary of what the student said wins.
+    const said = fin?.said ?? lv?.said;
+    return { ...best, status, parked, attempts: lv?.attempts ?? 0, ...(said ? { said } : {}) };
   });
 
   // Same rule as grade.ts primaryGap (kept local so this file stays free of server imports): the attempted

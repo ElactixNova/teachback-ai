@@ -12,6 +12,7 @@ const RawResultSchema = z.object({
   awarded: z.number(),
   evidence: z.object({ quote: z.string() }).nullable(),
   boardObservation: z.string().nullable(),
+  said: z.string().nullable(),
   boardUnfinished: z.boolean().nullable(),
   missingSteps: z.array(z.string()),
   fix: z.string().nullable(),
@@ -40,6 +41,7 @@ Rules:
 - Indigo-outlined cards labelled "Sam" on the whiteboard are the question Sam wrote for the student. They are never the student's work: never award marks for them, never quote them, and never describe them in boardObservation or boardUnfinished as something the student wrote or drew. Judge only the student's own ink (black, blue, red or green strokes).
 - Check the correctness of anything written, not just its presence. For a chemical equation, count the atoms of every element on each side: if they differ it is NOT balanced, so it earns no mark for a step that needs a balanced or correct equation, and \`fix\` must say which element is unbalanced. The same goes for wrong coefficients, units, signs or arithmetic. A step whose wording is only "states the equation" still needs the equation to be correct. If the handwriting is too unclear to check, say so in boardObservation and do not award the mark.
 - If the student made a claim about a criterion that contradicts or misstates it (for example saying glucose is made in the roots when the criterion is about where photosynthesis happens), that criterion was addressed: status is missed (or partial if some steps were right), never not_covered. Quote the wrong claim as evidence and say in \`fix\` what was wrong.
+- said: a short summary (one to three sentences, second person, past tense: "You said that...") of EVERYTHING the student said or wrote about this criterion across the WHOLE transcript and the whiteboard, not one sentence: include their correct points, their mistakes, any self-correction (say that they corrected themselves) and anything they left half-finished. Report only what they actually said or wrote: never invent, never add what they should have said (that goes in fix), never quote Sam. Write maths as $...$ LaTeX. Use null when they never addressed the criterion (not_covered).
 - boardUnfinished: true when what is on the whiteboard looks unfinished or cut off, so the student is probably midway or thinking (an equation with no right-hand side or a trailing operator, a half-drawn diagram, a label with no arrow, a formula missing its last term); false when the board is empty or looks complete. Use the same value on every result.
 - missingSteps: copy them verbatim from \`expected\`.
 - fix: one or two sentences the student could say out loud to earn the missing marks. Don't lecture.
