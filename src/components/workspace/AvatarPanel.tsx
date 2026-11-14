@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Clock3, Frown, LoaderCircle, Mic, MicOff, PenLine, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
+import { ArrowRight, Clock3, Download, Frown, LoaderCircle, Mic, MicOff, PenLine, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
 import type { Cue } from "@/types/session";
-import { ANAM_VIDEO_ID, type AvatarStatus, type TranscriptLine } from "./types";
+import { ANAM_VIDEO_ID, type AvatarStatus, type Speaker, type TranscriptLine } from "./types";
 import { SpokenMath } from "./MathText";
 import { cleanSamLine } from "./transcriptClean";
 
@@ -18,6 +18,18 @@ const CUE_STYLE: Record<Cue, { label: string; className: string; Icon: LucideIco
 /** Tallest the composer grows before it scrolls (about four lines). */
 const COMPOSER_MAX_PX = 112;
 
+/** A line still being spoken (T28): shown as one bubble updated in place, then replaced by the finished line. */
+export interface LiveLine {
+  id: string;
+  speaker: Speaker;
+  /** The whole line so far (raw). */
+  text: string;
+  t: string;
+}
+
+/** How close to the bottom (px) still counts as "reading the latest line", so new text scrolls into view. */
+const STICK_PX = 48;
+
 /** Detail strings from the bridge that mean "live, but the mic is blocked". */
 const MIC_BLOCKED = /microphone/i;
 
@@ -26,6 +38,10 @@ interface Props {
   statusDetail?: string;
   cue: Cue | null;
   transcript: TranscriptLine[];
+  /** Lines still being spoken (display only). */
+  liveLines?: LiveLine[];
+  /** Save the raw transcript as a .txt. */
+  onDownloadTranscript?: () => void;
   onConnect: () => void;
   onDisconnect: () => void;
   /** Typed fallback: lets the demo work without a mic or live avatar. */
@@ -36,7 +52,7 @@ interface Props {
   waiting?: boolean;
 }
 
-export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, onDisconnect, onTypedLine, children, waiting = false }: Props) {
+export function AvatarPanel({ status, statusDetail, cue, transcript, liveLines = [], onDownloadTranscript, onConnect, onDisconnect, onTypedLine, children, waiting = false }: Props) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -51,13 +67,9 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
     el.style.height = `${Math.min(full, COMPOSER_MAX_PX)}px`;
     el.style.overflowY = full > COMPOSER_MAX_PX ? "auto" : "hidden";
   }, [draft]);
-  const live = status === "live";
-  const micBlocked = live && !!statusDetail && MIC_BLOCKED.test(statusDetail);
+  const isLive = status === "live";
+  const micBlocked = isLive && !!statusDetail && MIC_BLOCKED.test(statusDetail);
 
-  useEffect(() => {
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [transcript.length]);
 
   const submit = () => {
     const text = draft.trim();
@@ -78,6 +90,26 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
       }),
     [transcript],
   );
+  // Live lines go through the same filter. A live line whose finished version is already in the list is skipped.
+  const live = useMemo(() => {
+    const done = new Set(transcript.map((l) => l.id));
+    return liveLines.flatMap((l) => {
+      if (done.has(l.id)) return [];
+      const display = l.speaker === "avatar" ? cleanSamLine(l.text) : l.text.trim();
+      return display ? [{ ...l, display }] : [];
+    });
+  }, [liveLines, transcript]);
+
+  // Follow new text only while the reader is at the bottom: scrolling up to reread is never yanked back.
+  const atBottom = useRef(true);
+  const liveText = live.map((l) => l.display).join("\n");
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+  }, [shown.length, liveText]);
+  const lineCount = shown.filter((l) => l.speaker !== "system").length;
+  // One list, so a live bubble and its finished line share a key and React updates it in place (no remount, no flicker).
+  const items = useMemo(() => [...shown.map((l) => ({ ...l, streaming: false })), ...live.map((l) => ({ ...l, streaming: true }))], [shown, live]);
 
   return (
     <section aria-label="Your AI student" className="sheet flex min-h-0 flex-1 flex-col gap-3 p-3">
@@ -86,10 +118,10 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
           id={ANAM_VIDEO_ID}
           autoPlay
           playsInline
-          className={`h-full w-full object-cover transition-opacity ${live ? "opacity-100" : "opacity-0"}`}
+          className={`h-full w-full object-cover transition-opacity ${isLive ? "opacity-100" : "opacity-0"}`}
         />
 
-        {!live && (
+        {!isLive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 pt-6 text-center">
             <p className="max-w-xs text-sm text-white/80">
               {status === "connecting"
@@ -113,15 +145,15 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
         <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur ${
-              live ? "bg-live text-white" : "bg-white/15 text-white/80"
+              isLive ? "bg-live text-white" : "bg-white/15 text-white/80"
             }`}
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${live ? "animate-pulse bg-white" : "bg-white/50"}`} />
-            {live ? "LIVE" : status === "connecting" ? "Connecting" : "Offline"}
+            <span className={`h-1.5 w-1.5 rounded-full ${isLive ? "animate-pulse bg-white" : "bg-white/50"}`} />
+            {isLive ? "LIVE" : status === "connecting" ? "Connecting" : "Offline"}
           </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white/90 backdrop-blur">
-            {live && waiting ? <PenLine className="h-3 w-3" /> : live && !micBlocked ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-            {live && waiting ? "Waiting while you write" : live && !micBlocked ? "Listening" : "Mic off"}
+            {isLive && waiting ? <PenLine className="h-3 w-3" /> : isLive && !micBlocked ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+            {isLive && waiting ? "Waiting while you write" : isLive && !micBlocked ? "Listening" : "Mic off"}
           </span>
         </div>
 
@@ -140,7 +172,7 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
           <span className="font-semibold text-white">Sam</span> · AI student
         </p>
 
-        {live && (
+        {isLive && (
           <button
             type="button"
             onClick={onDisconnect}
@@ -160,21 +192,41 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
       {children}
 
       <div className="flex min-h-64 flex-1 flex-col overflow-hidden lg:min-h-0">
-        <div className="flex items-center justify-between px-2 pb-1">
+        <div className="flex items-center gap-2 px-2 pb-1">
           <h2 className="text-base font-semibold tracking-[-0.01em]">Transcript</h2>
-          <span className="text-xs text-faint">{live ? "Sam is listening" : transcript.length ? `${shown.filter((l) => l.speaker !== "system").length} lines` : "Not started"}</span>
+          <span className="ml-auto text-xs text-faint">{isLive ? "Sam is listening" : transcript.length ? `${lineCount} ${lineCount === 1 ? "line" : "lines"}` : "Not started"}</span>
+          {onDownloadTranscript && lineCount > 0 && (
+            <button
+              type="button"
+              onClick={onDownloadTranscript}
+              className="-mr-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-faint transition hover:bg-sunk hover:text-ink"
+              aria-label="Download transcript (.txt)"
+              title="Download transcript (.txt)"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+            </button>
+          )}
         </div>
-        <div ref={listRef} className="min-h-24 flex-1 space-y-2 overflow-y-auto px-2 py-2" aria-live="polite">
-          {transcript.length === 0 ? (
+        <div
+          ref={listRef}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_PX;
+          }}
+          className="min-h-24 flex-1 space-y-2 overflow-y-auto px-2 py-2"
+          aria-live="polite"
+        >
+          {items.length === 0 ? (
             <p className="text-sm text-muted">Start the session and explain the idea to Sam in your own words. You can also type here.</p>
           ) : (
-            shown.map((l) =>
+            items.map((l) =>
               l.speaker === "system" ? (
                 <p key={l.id} className="flex items-center justify-center gap-1.5 text-center text-[11px] font-semibold text-parked">
                   <Clock3 className="h-3 w-3" /> {l.text}
                 </p>
               ) : (
-                <div key={l.id} className={`flex flex-col ${l.speaker === "student" ? "items-end" : "items-start"}`}>
+                // A line still being spoken is hidden from screen readers: they hear it once, when it is finished.
+                <div key={l.id} className={`flex flex-col ${l.speaker === "student" ? "items-end" : "items-start"}`} aria-hidden={l.streaming || undefined} data-streaming={l.streaming || undefined}>
                   <span className="px-1 pb-1 text-xs text-faint">{l.speaker === "student" ? "You" : "Sam"}</span>
                   <p
                     className={`max-w-[88%] rounded-lg px-3.5 py-2.5 text-[15px] leading-6 ${
@@ -182,7 +234,8 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, onConnect, 
                     }`}
                   >
                     <span className={`mr-1.5 text-[10px] font-semibold tabular-nums ${l.speaker === "student" ? "text-white/70" : "text-faint"}`}>{l.t}</span>
-                    <SpokenMath text={l.display} />
+                    <SpokenMath text={l.display} streaming={l.streaming} />
+                    {l.streaming && <span className="ml-1 inline-block h-3.5 w-[3px] translate-y-0.5 animate-pulse rounded-full bg-current opacity-50" aria-hidden />}
                   </p>
                 </div>
               ),

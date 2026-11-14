@@ -7,12 +7,13 @@ import { createAnamAvatarBridge } from "@/lib/anam/bridge";
 import { visualRequestForCriterion } from "@/lib/fal/request";
 import { emptyResults, finalizeReport, liveFocusId, mergeLiveResults, parkResult } from "@/lib/rail/state";
 import { useLiveAnalysis } from "@/lib/rail/useLiveAnalysis";
-import { AvatarPanel } from "./AvatarPanel";
+import { AvatarPanel, type LiveLine } from "./AvatarPanel";
 import { CentrePanel } from "./CentrePanel";
 import { GapNotesPanel, gapsOf, type CheckState } from "./GapNotesPanel";
 import { MarkSchemeRail } from "./MarkSchemeRail";
 import { MAX_LEARN_IMAGES, SummaryView } from "./SummaryView";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
+import { downloadText, formatTranscript, transcriptFileName } from "./transcriptExport";
 import { analyzeFinal, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
 import {
   ANAM_VIDEO_ID,
@@ -34,6 +35,8 @@ const CUE_TTL_MS = 4000;
 const NOTES_EXCERPT_CHARS = 4000;
 
 let lineSeq = 0;
+/** Transcript key of a streamed line (live bubble and its finished line share it). */
+const liveKey = (streamId: string) => `s-${streamId}`;
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -51,6 +54,9 @@ export function Workspace() {
   const [scheme, setScheme] = useState<Async<MarkScheme>>({ status: "idle" });
   const [results, setResults] = useState<CriterionResult[]>([]);
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
+  // T28: lines still being spoken (display only; the examiner reads `transcript`, built from finished lines).
+  const [liveLines, setLiveLines] = useState<LiveLine[]>([]);
+  const liveStart = useRef(new Map<string, number>());
   const [boardEmpty, setBoardEmpty] = useState(true);
   const [boardVersion, setBoardVersion] = useState(0);
   // "Sam is waiting while you write": true while strokes keep coming, false 4s after the last one.
@@ -95,10 +101,14 @@ export function Workspace() {
     latest.current = { curriculum, markScheme, results, transcript, report, view, focusIds, boardVersion, notes };
   }, [curriculum, markScheme, results, transcript, report, view, focusIds, boardVersion, notes]);
 
-  const addLine = useCallback((speaker: TranscriptLine["speaker"], text: string) => {
-    const now = Date.now();
+  /** `streamId`: a line that was shown live keeps that bubble's key and start time, so it does not jump or flicker. */
+  const addLine = useCallback((speaker: TranscriptLine["speaker"], text: string, streamId?: string) => {
+    const started = streamId ? liveStart.current.get(streamId) : undefined;
+    if (streamId) liveStart.current.delete(streamId);
+    const now = started ?? Date.now();
     sessionStart.current ??= now;
-    const line: TranscriptLine = { id: `l${now}-${lineSeq++}`, speaker, text, at: new Date(now).toISOString(), t: mmss(now - sessionStart.current) };
+    const id = streamId && started !== undefined ? liveKey(streamId) : `l${now}-${lineSeq++}`;
+    const line: TranscriptLine = { id, speaker, text, at: new Date(now).toISOString(), t: mmss(Math.max(0, now - sessionStart.current)) };
     latest.current.transcript = [...latest.current.transcript, line];
     setTranscript(latest.current.transcript);
   }, []);
@@ -356,8 +366,31 @@ export function Workspace() {
 
   const handlers: AvatarHandlers = useMemo(
     () => ({
-      onTranscript: (speaker, text) => {
-        if (text.trim()) addLine(speaker, text.trim());
+      onTranscript: (speaker, text, id) => {
+        // The finished line replaces its live bubble in the same render (React batches both updates).
+        if (id) setLiveLines((prev) => prev.filter((l) => l.id !== liveKey(id)));
+        if (text.trim()) addLine(speaker, text.trim(), id);
+        else if (id) liveStart.current.delete(id);
+      },
+      onTranscriptPartial: (id, speaker, textSoFar) => {
+        const key = liveKey(id);
+        if (!textSoFar.trim()) {
+          liveStart.current.delete(id);
+          setLiveLines((prev) => prev.filter((l) => l.id !== key));
+          return;
+        }
+        const now = Date.now();
+        sessionStart.current ??= now;
+        if (!liveStart.current.has(id)) liveStart.current.set(id, now);
+        const t = mmss(Math.max(0, liveStart.current.get(id)! - sessionStart.current));
+        setLiveLines((prev) => {
+          const i = prev.findIndex((l) => l.id === key);
+          if (i < 0) return [...prev, { id: key, speaker, text: textSoFar, t }];
+          if (prev[i].text === textSoFar) return prev;
+          const next = prev.slice();
+          next[i] = { ...prev[i], text: textSoFar };
+          return next;
+        });
       },
       onCue: (c) => {
         setCue(c);
@@ -365,12 +398,22 @@ export function Workspace() {
         cueTimer.current = setTimeout(() => setCue(null), CUE_TTL_MS);
       },
       onStatus: (status, detail) => {
+        // A session that stops mid-sentence leaves no half-finished bubble behind.
+        if (status !== "live" && status !== "connecting") {
+          liveStart.current.clear();
+          setLiveLines([]);
+        }
         setAvatarStatus(status);
         setAvatarDetail(detail);
       },
     }),
     [addLine],
   );
+
+  // Dev only: lets headless tests stream fake avatar lines (onTranscriptPartial) without an Anam session.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __feynmanHandlers?: AvatarHandlers }).__feynmanHandlers = handlers;
+  }, [handlers]);
 
   const connect = useCallback(async () => {
     sessionRef.current?.disconnect();
@@ -387,6 +430,15 @@ export function Workspace() {
       handlers.onStatus("error", e instanceof Error ? e.message : "Could not connect to the avatar.");
     }
   }, [actions, handlers]);
+
+  /** T28: the raw transcript as a .txt (topic, date, final mark when there is one). */
+  const downloadTranscript = useCallback(() => {
+    const { transcript: lines, markScheme: s, report: r, curriculum: cur, view: v } = latest.current;
+    const date = new Date(sessionStart.current ?? Date.now());
+    const topic = s?.topic || cur?.topic || cur?.title;
+    const text = formatTranscript({ topic, date, mark: r ? { awarded: r.awarded, total: r.total, final: v === "summary" } : undefined, lines });
+    downloadText(transcriptFileName(topic, date), text);
+  }, []);
 
   const disconnect = useCallback(() => {
     sessionRef.current?.disconnect();
@@ -502,6 +554,7 @@ export function Workspace() {
                   onRetryVisual={(id) => void generateVisualExplainer(id, true)}
                   onTeachBack={teachNext}
                   onBack={() => setView("board")}
+                  onDownloadTranscript={downloadTranscript}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center gap-3 rounded-2xl border border-line bg-card p-6 text-sm font-semibold text-muted" role="status">
@@ -519,6 +572,8 @@ export function Workspace() {
             waiting={writing}
             cue={cue}
             transcript={transcript}
+            liveLines={liveLines}
+            onDownloadTranscript={downloadTranscript}
             onConnect={() => void connect()}
             onDisconnect={disconnect}
             onTypedLine={(text) => {

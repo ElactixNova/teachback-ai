@@ -1,4 +1,4 @@
-// T14: "write it / draw it" chips and the "What you missed" callout, shared by the rail, gap notes and end screen.
+// T14/T28: "write it / draw it" chips and the "What you missed" callout, shared by the rail, gap notes and end screen.
 import { PenLine, Shapes } from "lucide-react";
 import type { AskMode, Criterion, CriterionResult } from "@/types/session";
 import { MathText, SpokenMath } from "./MathText";
@@ -23,30 +23,62 @@ export function AskChip({ ask, className = "" }: { ask?: AskMode; className?: st
   );
 }
 
+/** A mark-scheme step as a plain sentence: ends with a full stop unless it already ends a sentence (or in maths). */
+const sentence = (s: string) => (/[.!?:$)]$/.test(s) ? s : `${s}.`);
+
 /**
- * "What you missed": the mark-scheme steps this student did not earn, next to the illustration of them.
- * A wrong claim (status missed, with a quote) is shown crossed out, so the correction reads against it.
+ * T28 "What you missed", written like a teacher's margin note: one short heading, then what you said next to what
+ * the full answer needs (stacked when narrow), in calm colours. Shown next to the illustration of the point.
+ * `showSaid={false}` where the same card already has the "What you said" box (gap notes), so it is not said twice.
  */
-export function MissedCallout({ criterion, result, className = "" }: { criterion: Criterion; result: CriterionResult; className?: string }) {
-  const missing = result.missingSteps.filter((s) => s.trim());
+export function MissedCallout({
+  criterion,
+  result,
+  className = "",
+  showSaid = true,
+}: {
+  criterion: Criterion;
+  result: CriterionResult;
+  className?: string;
+  showSaid?: boolean;
+}) {
+  const missing = result.missingSteps.map((s) => s.trim()).filter(Boolean);
   if (missing.length === 0) return null;
-  const wrong = result.status === "missed" && result.evidence?.quote;
+  const said = result.said?.trim();
+  const quote = result.evidence?.quote?.trim();
+
   return (
-    <aside aria-label={`What you missed: ${plainMath(criterion.title)}`} className={`rounded-xl border border-missed/30 bg-missed-soft p-3 text-sm ${className}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-missed">What you missed</p>
-      <ul className="mt-1.5 space-y-1 leading-snug">
-        {missing.map((s) => (
-          <li key={s} className="flex gap-2">
-            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-missed" aria-hidden />
-            <MathText text={s} className="font-semibold text-ink" />
-          </li>
-        ))}
-      </ul>
-      {wrong && (
-        <p className="mt-2 text-xs text-muted">
-          You said: <s className="decoration-missed decoration-2"><SpokenMath text={result.evidence!.quote} /></s>
-        </p>
-      )}
+    <aside aria-label={`What you missed: ${plainMath(criterion.title)}`} className={`@container rounded-xl border border-line bg-card p-3 text-sm ${className}`}>
+      <h4 className="text-sm font-semibold text-ink">What you missed</h4>
+      <div className={`mt-2 grid gap-2 ${showSaid ? "@md:grid-cols-2" : ""}`}>
+        {showSaid && (
+          <div className="min-w-0 rounded-lg bg-canvas px-3 py-2">
+            <p className="text-xs font-semibold text-faint">Your answer</p>
+            <p className="mt-0.5 line-clamp-4 leading-relaxed text-muted">
+              {said ? (
+                <MathText text={said} />
+              ) : quote ? (
+                <>
+                  “<SpokenMath text={quote} />”
+                </>
+              ) : (
+                "Nothing about this point yet."
+              )}
+            </p>
+          </div>
+        )}
+        <div className="min-w-0 rounded-lg border-l-[3px] border-accent bg-accent-soft/60 px-3 py-2">
+          <p className="text-xs font-semibold text-accent">The full answer also needs</p>
+          <p className="mt-0.5 leading-relaxed text-ink">
+            {missing.map((s, i) => (
+              <span key={s}>
+                {i > 0 && " "}
+                <MathText text={sentence(s)} />
+              </span>
+            ))}
+          </p>
+        </div>
+      </div>
     </aside>
   );
 }

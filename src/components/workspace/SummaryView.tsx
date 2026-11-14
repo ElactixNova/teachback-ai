@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, LoaderCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Download, LoaderCircle, RefreshCw } from "lucide-react";
 import type { GapReport, MarkScheme, RevisionNote } from "@/types/session";
 import { svgDataUri } from "./api";
 import { gapsOf, VisualSlot, type Gap } from "./GapNotesPanel";
@@ -23,6 +23,8 @@ interface Props {
   onRetryVisual: (criterionId: string) => void;
   onTeachBack: (criterionIds: string[]) => void;
   onBack: () => void;
+  /** Save the raw transcript as a .txt. */
+  onDownloadTranscript?: () => void;
 }
 
 function Diagram({ note, visual, title, onRetry }: { note: RevisionNote; visual?: VisualState; title: string; onRetry: () => void }) {
@@ -33,7 +35,7 @@ function Diagram({ note, visual, title, onRetry }: { note: RevisionNote; visual?
   return <VisualSlot state={visual} alt={`Diagram: ${plainMath(title)}`} onRetry={onRetry} compact />;
 }
 
-export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRetryVisual, onTeachBack, onBack }: Props) {
+export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRetryVisual, onTeachBack, onBack, onDownloadTranscript }: Props) {
   const gaps = gapsOf(scheme, report);
   const status = (id: string) => displayStatus(report.results.find((r) => r.criterionId === id));
   const count = (s: string) => scheme.criteria.filter((c) => status(c.id) === s).length;
@@ -54,9 +56,16 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
               <span className="ml-3 text-base font-semibold text-muted">{pct}%</span>
             </p>
           </div>
-          <button type="button" onClick={onBack} className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-semibold hover:bg-canvas">
-            <ArrowLeft className="h-4 w-4" /> Back to session
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {onDownloadTranscript && (
+              <button type="button" onClick={onDownloadTranscript} className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-semibold hover:bg-canvas">
+                <Download className="h-4 w-4" aria-hidden /> Download transcript
+              </button>
+            )}
+            <button type="button" onClick={onBack} className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-semibold hover:bg-canvas">
+              <ArrowLeft className="h-4 w-4" /> Back to session
+            </button>
+          </div>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-canvas" role="progressbar" aria-valuemin={0} aria-valuemax={report.total} aria-valuenow={report.awarded} aria-label="Final mark">
             <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
           </div>
