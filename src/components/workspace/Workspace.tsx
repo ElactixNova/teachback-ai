@@ -389,29 +389,29 @@ export function Workspace() {
 
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
-      <header className="flex items-center gap-3 border-b border-line bg-card px-4 py-2 sm:px-6">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-base font-extrabold text-white" aria-hidden>
-            F
-          </div>
-          <div className="leading-tight">
-            <p className="text-sm font-extrabold tracking-tight">Feynman AI</p>
-            <p className="hidden text-[11px] font-medium text-muted sm:block">Learn it by teaching it</p>
-          </div>
+      <header className="topbar sticky top-0 z-10 flex min-h-[60px] items-center gap-3 px-4 py-2 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand SVG exported from Figma (Brand/Mark 3:98) */}
+          <img src="/brand-mark.svg" alt="" width={30} height={30} className="h-[30px] w-[30px] shrink-0" />
+          <p className="text-xl font-semibold tracking-[-0.015em]">Feynman AI</p>
+          <span className="hidden h-5 w-px bg-line sm:block" aria-hidden />
+          <p className="hidden text-base font-medium text-muted sm:block">Learn it by teaching it</p>
         </div>
 
-        {markScheme && (
-          <span className="ml-2 hidden truncate rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent md:inline">
-            Teaching: {markScheme.topic}
-          </span>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-xs font-medium text-muted xl:inline">
+        <div className="ml-auto flex min-w-0 items-center gap-4">
+          {markScheme && (
+            <p className="hidden min-w-0 items-baseline gap-2 truncate md:flex">
+              <span className="text-sm text-faint">Teaching</span>
+              <span className="hl truncate text-xl font-semibold tracking-[-0.015em]" title={markScheme.topic}>
+                {markScheme.topic}
+              </span>
+            </p>
+          )}
+          <span className="hidden text-sm text-faint xl:inline">
             {studentLines} {studentLines === 1 ? "line" : "lines"} explained · {boardEmpty ? "board empty" : "board in use"}
           </span>
           {report && view !== "notes" && (
-            <button type="button" onClick={() => setView("notes")} className="hidden h-11 items-center rounded-xl px-3 text-sm font-bold text-muted hover:bg-canvas sm:inline-flex">
+            <button type="button" onClick={() => setView("notes")} className="hidden h-11 items-center rounded-full px-3 text-sm font-semibold text-muted hover:bg-accent-soft sm:inline-flex">
               Gap notes
             </button>
           )}
@@ -419,7 +419,7 @@ export function Workspace() {
             type="button"
             onClick={() => void finishSession()}
             disabled={!markScheme || checking}
-            className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-bold text-white transition hover:bg-accent-strong disabled:opacity-40"
+            className="action inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-card px-4 text-sm font-semibold text-ink transition hover:bg-accent-soft disabled:opacity-40"
           >
             {checking ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Flag className="h-4 w-4" />}
             <span className="hidden sm:inline">Finish &amp; get report</span>
@@ -429,7 +429,7 @@ export function Workspace() {
       </header>
 
       {/* Phones: one scrolling column (mark scheme, avatar, centre). lg+: three fixed-height columns. */}
-      <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5 lg:grid lg:grid-cols-[minmax(250px,1fr)_minmax(0,2.2fr)_minmax(280px,1.1fr)] lg:overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6 pt-5 sm:px-6 lg:grid lg:grid-cols-[minmax(250px,1fr)_minmax(0,2.2fr)_minmax(280px,1.1fr)] lg:overflow-hidden">
         <div className="order-1 flex shrink-0 flex-col lg:order-none lg:min-h-0">
           <MarkSchemeRail
             curriculum={curriculum}
@@ -506,14 +506,14 @@ export function Workspace() {
           >
             {view === "summary" && report && retryIds.length > 0 && (
               <div className="rounded-2xl border border-accent bg-accent-soft p-3">
-                <p className="text-sm font-bold">
+                <p className="text-sm font-semibold">
                   {parkedIds.length > 0 ? `${parkedIds.length} parked ${parkedIds.length === 1 ? "point" : "points"} to try again` : "Have another go at your gaps"}
                 </p>
                 <p className="text-xs text-muted">Sam will ask only about these.</p>
                 <button
                   type="button"
                   onClick={() => teachNext(retryIds)}
-                  className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent text-sm font-bold text-white hover:bg-accent-strong"
+                  className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-white hover:bg-accent-strong"
                 >
                   <Sparkles className="h-4 w-4" /> Try it now
                 </button>

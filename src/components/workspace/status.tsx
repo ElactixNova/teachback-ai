@@ -50,7 +50,7 @@ export function StatusIcon({ status, className = "" }: { status: DisplayStatus; 
       );
     case "missed":
       return (
-        <span className={`${base} bg-missed text-[11px] font-extrabold text-white`} aria-hidden>
+        <span className={`${base} bg-missed text-[11px] font-semibold text-white`} aria-hidden>
           !
         </span>
       );
@@ -83,7 +83,7 @@ export function MarksPill({ result, criterion }: { result?: CriterionResult; cri
           ? "bg-accent-soft text-accent"
           : "bg-parked-soft text-parked";
   return (
-    <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${tone}`}>
+    <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${tone}`}>
       {result?.awarded ?? 0} / {criterion.marks}
     </span>
   );
