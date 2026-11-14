@@ -9,6 +9,7 @@ export interface RawResult {
   awarded: number;
   evidence: { quote: string } | null;
   boardObservation: string | null;
+  said?: string | null;
   boardUnfinished?: boolean | null;
   missingSteps: string[];
   fix: string | null;
@@ -90,6 +91,7 @@ function grade(c: Criterion, raw: RawResult | undefined, transcript: TimedLine[]
     missingSteps: missing,
     ...(evidence ? { evidence } : {}),
     ...(raw.boardObservation ? { boardObservation: raw.boardObservation } : {}),
+    ...(status !== "not_covered" && raw.said?.trim() ? { said: raw.said.trim().slice(0, 700) } : {}),
     ...(typeof raw.boardUnfinished === "boolean" ? { boardUnfinished: raw.boardUnfinished } : {}),
     ...(raw.fix && status !== "full" ? { fix: raw.fix } : {}),
   };
