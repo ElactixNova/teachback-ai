@@ -197,7 +197,7 @@ export function Workspace() {
           </span>
           <button
             type="button"
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => setDrawerOpen((o) => !o)}
             className="relative inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50"
           >
             <PanelRightOpen className="h-4 w-4" /> Report
@@ -218,7 +218,11 @@ export function Workspace() {
       )}
 
       {/* Phones: one scrolling column. lg+: fixed-height split screen. */}
-      <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6 lg:grid lg:grid-cols-[minmax(340px,2fr)_3fr] lg:overflow-hidden">
+      <main
+        className={`flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6 lg:grid lg:overflow-hidden ${
+          drawerOpen ? "lg:grid-cols-[minmax(300px,2fr)_minmax(380px,3fr)_minmax(340px,2fr)]" : "lg:grid-cols-[minmax(340px,2fr)_3fr]"
+        }`}
+      >
         <div className="flex shrink-0 flex-col gap-3 lg:min-h-0 lg:shrink">
           <CurriculumUploader curriculum={curriculum} onChange={setCurriculum} />
           <AvatarPanel
@@ -243,19 +247,18 @@ export function Workspace() {
             onEmptyChange={setBoardEmpty}
           />
         </div>
+        <ReportDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          report={report}
+          checkStatus={checkStatus}
+          checkError={checkError}
+          visuals={visuals}
+          onGenerateVisual={(id) => void generateVisualExplainer(id)}
+          onToggleStep={toggleStep}
+          onRecheck={() => void checkExplanation()}
+        />
       </main>
-
-      <ReportDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        report={report}
-        checkStatus={checkStatus}
-        checkError={checkError}
-        visuals={visuals}
-        onGenerateVisual={(id) => void generateVisualExplainer(id)}
-        onToggleStep={toggleStep}
-        onRecheck={() => void checkExplanation()}
-      />
     </div>
   );
 }

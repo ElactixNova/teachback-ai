@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import {
   CircleAlert,
   CircleCheck,
@@ -117,33 +116,19 @@ export function ReportDrawer({
   onToggleStep,
   onRecheck,
 }: Props) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
   const totalMinutes = report?.studyPlan.reduce((n, s) => n + (s.done ? 0 : s.estimatedMinutes), 0) ?? 0;
 
+  // A docked, non-modal panel: it takes its own column next to the whiteboard (lg+) or sits below it
+  // (smaller screens), so there is no backdrop and the whiteboard stays usable while it is open.
+  // Escape closes it only while focus is inside the panel.
   return (
     <>
-      <div
-        className={`fixed inset-0 z-30 bg-stone-950/30 backdrop-blur-[2px] transition-opacity ${
-          open ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-        onClick={onClose}
-        aria-hidden
-      />
       <aside
-        className={`fixed inset-y-0 right-0 z-40 flex w-full max-w-[520px] flex-col bg-stone-50 shadow-2xl transition-transform duration-300 ${
-          open ? "translate-x-0" : "translate-x-full"
-        }`}
-        role="dialog"
-        aria-modal="true"
+        className={`${open ? "flex" : "hidden"} min-h-[420px] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-sm lg:h-full lg:min-h-0`}
         aria-label="Knowledge Gap Report"
         aria-hidden={!open}
         inert={!open}
+        onKeyDown={(e) => e.key === "Escape" && onClose()}
       >
         <header className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-3">
           <div>
@@ -155,7 +140,7 @@ export function ReportDrawer({
               type="button"
               onClick={onRecheck}
               disabled={checkStatus === "checking"}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${checkStatus === "checking" ? "animate-spin" : ""}`} /> Re-check
             </button>
