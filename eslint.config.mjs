@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Standalone e2e harness and demo fixtures (own package.json, CommonJS helper), not app code.
+    "tests/**",
+    "fixtures/**",
   ]),
 ]);
 
