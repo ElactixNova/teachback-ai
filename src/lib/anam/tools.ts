@@ -56,7 +56,7 @@ export const CLIENT_TOOLS: AnamClientToolDefinition[] = [
     type: "client",
     name: TOOL.generateVisualExplainer,
     description:
-      "Generate a short visual explainer (video or image) for a knowledge gap and show it in the report. Call this directly whenever the student asks for a visual, picture, diagram or video, or after a report when a visual would help. If no report exists yet it checks their explanation first. Appears on screen in a few seconds.",
+      "Generate a visual explainer (an accurate labelled diagram) for a knowledge gap and show it in the report. Call this directly whenever the student asks for a visual, picture, diagram or video, or after a report when a visual would help. If no report exists yet it checks their explanation first. The picture takes about 20 seconds to appear, so keep talking while it loads.",
     parameters: {
       type: "object",
       properties: {

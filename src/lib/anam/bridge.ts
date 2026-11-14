@@ -107,7 +107,7 @@ function registerTools(client: AnamClient, actions: WorkspaceActions) {
           r = await check();
           if (!r) return "The check could not run: the student has not explained anything yet. Ask them to explain a bit first.";
           if (r.gaps.length === 0) return `${summariseReport(r)} There are no gaps, so no visual is needed.`;
-          return `${summariseReport(r)} A visual for the most important gap is being generated and will appear in the report in a few seconds.`;
+          return `${summariseReport(r)} A picture for the most important gap is being drawn and will appear in the report in about 20 seconds; keep talking with the student while it loads.`;
         }
         if (r.gaps.length === 0) return "The latest report has no gaps, so there is nothing to illustrate. Tell the student they did well.";
         const wanted = typeof p.arguments?.concept === "string" ? p.arguments.concept.toLowerCase().trim() : "";
@@ -116,7 +116,7 @@ function registerTools(client: AnamClient, actions: WorkspaceActions) {
           : undefined;
         // Fire and forget: fal can take longer than the tool timeout; the drawer shows progress.
         void actions.generateVisualExplainer(gap?.id);
-        return `Generating a visual for "${gap?.concept ?? "the most important gap"}". It will appear in the report in a few seconds. Tell the student to watch for it.`;
+        return `Generating a visual for "${gap?.concept ?? "the most important gap"}". It is a picture that takes about 20 seconds to appear in the report. Tell the student, then keep the conversation going while it loads.`;
       },
     }),
   ];

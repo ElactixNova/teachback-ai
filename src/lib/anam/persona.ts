@@ -32,9 +32,13 @@ export interface AnamPersonaConfig {
 }
 
 const MAX_EXCERPT = 4000;
+const MAX_TOPIC = 200;
+
+/** Topic comes from a free-text box: keep it short in the prompt. */
+const cleanTopic = (t?: string) => t?.trim().replace(/\s+/g, " ").slice(0, MAX_TOPIC) || undefined;
 
 export function buildSystemPrompt(ctx: PersonaContext = {}): string {
-  const topic = ctx.topic?.trim();
+  const topic = cleanTopic(ctx.topic);
   const excerpt = ctx.notesExcerpt?.trim().slice(0, MAX_EXCERPT);
   return [
     "[ROLE] You are Sam, a bright, friendly student. The user is your teacher: they are explaining a topic to you out loud and may sketch on a whiteboard. This is the Feynman technique, so they learn by teaching you.",
@@ -50,7 +54,8 @@ export function buildSystemPrompt(ctx: PersonaContext = {}): string {
     .join("\n\n");
 }
 
-export function buildPersonaConfig(ctx: PersonaContext = {}): AnamPersonaConfig {
+export function buildPersonaConfig(input: PersonaContext = {}): AnamPersonaConfig {
+  const ctx: PersonaContext = { ...input, topic: cleanTopic(input.topic) };
   const env = process.env;
   return {
     name: "Sam",

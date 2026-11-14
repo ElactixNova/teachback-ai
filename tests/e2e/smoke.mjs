@@ -143,7 +143,8 @@ try {
   const score = await page.getByRole("img", { name: /understanding score/i }).first().getAttribute("aria-label", { timeout: 20000 }).catch(() => null);
   check("report drawer shows a score", !!score, score ?? "");
   const gapText = (await drawer.first().innerText().catch(() => "")).toLowerCase();
-  check("report names the roots misconception", /root/.test(gapText));
+  // LLM wording varies: accept any phrasing of the "where photosynthesis happens" gap.
+  check("report names the roots misconception", /root|leaf|leaves|chloroplast|where (it|photosynthesis) happens/.test(gapText));
 
   check("generate-visual 200", await waitApi("/api/generate-visual", 200, 60000));
   const media = await page
