@@ -106,6 +106,8 @@ export interface CriterionResult {
   evidence?: { quote: string; timestamp: string };
   /** What the whiteboard snapshot shows or lacks. */
   boardObservation?: string;
+  /** True when the board looks unfinished (cut-off equation, half-drawn diagram): the student is probably midway or thinking. */
+  boardUnfinished?: boolean;
   /** Items from the criterion's `expected` that were not earned (verbatim). */
   missingSteps: string[];
   /** One or two sentences, phrased as the next thing to say out loud. */

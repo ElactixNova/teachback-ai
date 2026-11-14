@@ -96,7 +96,7 @@ export function mergeLive(scheme: MarkScheme, state: RailState, incoming: Criter
     const better = next.awarded > prev.awarded || (next.awarded === prev.awarded && prev.status === "not_covered" && next.status !== "not_covered");
     const base: CriterionResult = better
       ? { ...next, awarded: Math.min(next.awarded, c.marks) }
-      : { ...prev, boardObservation: next.boardObservation ?? prev.boardObservation };
+      : { ...prev, boardObservation: next.boardObservation ?? prev.boardObservation, boardUnfinished: next.boardUnfinished ?? prev.boardUnfinished };
     // Live "in_progress" is not a stored status: it is reported through activeId.
     if (base.status === "in_progress") base.status = base.awarded > 0 ? "partial" : prev.status === "not_covered" ? "not_covered" : prev.status;
 
@@ -188,7 +188,10 @@ export function boardNote(scheme: MarkScheme, results: CriterionResult[]): strin
     .map((r) => `${title(r.criterionId)}: ${r.boardObservation!.trim()}`)
     .join(" | ");
   if (!seen) return "";
-  return `On their whiteboard (you can see it through the examiner, so never ask them to say aloud what is already written or drawn there): ${seen.slice(0, MAX_BOARD_CHARS)}.`;
+  const unfinished = results.some((r) => r.boardUnfinished)
+    ? " Their board looks UNFINISHED: they are probably midway or thinking, so give them time and do not ask about it yet."
+    : "";
+  return `On their whiteboard (you can see it through the examiner, so never ask them to say aloud what is already written or drawn there): ${seen.slice(0, MAX_BOARD_CHARS)}.${unfinished}`;
 }
 
 /** What the avatar gets back from get_rail_status: short, factual, no answers. */
@@ -256,7 +259,8 @@ export function railChangeNote(scheme: MarkScheme, before: CriterionResult[], af
   const was = (id: string) => before.find((r) => r.criterionId === id)?.status;
   const nowFull = after.filter((r) => r.status === "full" && was(r.criterionId) !== "full").map((r) => title(r.criterionId));
   const nowParked = after.filter((r) => r.status === "parked" && was(r.criterionId) !== "parked").map((r) => title(r.criterionId));
-  const boardChanged = after.some((r) => boardMoved(before.find((b) => b.criterionId === r.criterionId)?.boardObservation, r.boardObservation));
+  const unfinishedFlipped = after.some((r) => r.boardUnfinished !== undefined && r.boardUnfinished !== before.find((b) => b.criterionId === r.criterionId)?.boardUnfinished);
+  const boardChanged = unfinishedFlipped || after.some((r) => boardMoved(before.find((b) => b.criterionId === r.criterionId)?.boardObservation, r.boardObservation));
   if (!nowFull.length && !nowParked.length && !boardChanged) return null;
   return [
     "[RAIL UPDATE, private, do not read out]",

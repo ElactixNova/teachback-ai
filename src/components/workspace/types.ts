@@ -80,6 +80,8 @@ export interface AvatarSession {
   sendText?: (text: string) => void;
   /** Optional: tell the avatar which criteria to work on next. Empty = the whole scheme. */
   setFocus?: (criteria: { id: string; title: string; missingSteps: string[] }[]) => void;
+  /** Optional: tell the avatar the student is writing/drawing now, or has stopped (private context, never spoken). */
+  notifyBoard?: (state: "writing" | "idle") => void;
 }
 
 /** Callbacks the avatar integration uses to push state into the UI. */
