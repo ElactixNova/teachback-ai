@@ -26,7 +26,7 @@ const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
  * `typed` holds lines sent with sendText: the workspace already shows them, so their echo is skipped.
  */
 function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>, onPersonaSpeech?: (chars: number, done: boolean) => void) {
-  const buffers = new Map<string, { speaker: Speaker; text: string }>();
+  const buffers = new Map<string, { speaker: Speaker; text: string; shown: boolean }>();
   return (e: MessageStreamEvent) => {
     const speaker: Speaker = String(e.role) === "user" ? "student" : "avatar";
     const cue = toUiCue(e.cueTag);
@@ -35,7 +35,7 @@ function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>,
     // Sam's words as they stream: the pen writing a question on the board keeps pace with them.
     if (speaker === "avatar") onPersonaSpeech?.((e.content ?? "").length, !!(e.endOfSpeech || e.interrupted));
 
-    const buf = buffers.get(e.id) ?? { speaker, text: "" };
+    const buf = buffers.get(e.id) ?? { speaker, text: "", shown: false };
     buf.text += e.content ?? "";
     buffers.set(e.id, buf);
 
@@ -43,12 +43,30 @@ function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>,
       buffers.delete(e.id);
       const { clean: untagged, cues } = extractCues(buf.text);
       cues.forEach(handlers.onCue);
-      // Sam's lines only: the student may type real brackets (an interval, a matrix).
-      const clean = buf.speaker === "avatar" ? stripBrackets(untagged) : untagged;
-      if (buf.speaker === "student" && typed.delete(norm(clean))) return;
-      if (clean) handlers.onTranscript(buf.speaker, clean);
+      const clean = cleanLine(buf.speaker, untagged);
+      const echo = buf.speaker === "student" && typed.delete(norm(clean));
+      if (clean && !echo) handlers.onTranscript(buf.speaker, clean, e.id);
+      else if (buf.shown) handlers.onTranscriptPartial?.(e.id, buf.speaker, "");
+      return;
     }
+
+    // The line so far, for the live bubble. A typed line's echo is never shown.
+    if (!handlers.onTranscriptPartial) return;
+    const soFar = cleanLine(buf.speaker, extractCues(buf.text).clean);
+    if (!soFar || (buf.speaker === "student" && isTypedPrefix(typed, soFar))) return;
+    buf.shown = true;
+    handlers.onTranscriptPartial(e.id, buf.speaker, soFar);
   };
+}
+
+/** Sam's lines only lose [...] segments: the student may type real brackets (an interval, a matrix). */
+const cleanLine = (speaker: Speaker, text: string) => (speaker === "avatar" ? stripBrackets(text) : text);
+
+/** Is this partial student line the start of a line they typed (whose echo we skip)? */
+function isTypedPrefix(typed: Set<string>, soFar: string): boolean {
+  const n = norm(soFar);
+  for (const t of typed) if (t.startsWith(n)) return true;
+  return false;
 }
 
 export interface AnamSession extends AvatarSession {

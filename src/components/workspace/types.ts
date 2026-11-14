@@ -92,7 +92,15 @@ export interface AvatarSession {
 
 /** Callbacks the avatar integration uses to push state into the UI. */
 export interface AvatarHandlers {
-  onTranscript: (speaker: Speaker, text: string) => void;
+  /** A finished line. `id` matches the earlier onTranscriptPartial calls for it, so the live bubble can be replaced. */
+  onTranscript: (speaker: Speaker, text: string, id?: string) => void;
+  /**
+   * T28/T29: a line while it is still being spoken (fires on every streamed chunk, cue tags and [...] already
+   * removed). `textSoFar` is the whole line so far, not the new chunk. An empty `textSoFar` means "drop this
+   * live line": it ended with nothing to show (e.g. the echo of a typed line), and no onTranscript follows.
+   * Display only: the examiner transcript is built from onTranscript.
+   */
+  onTranscriptPartial?: (id: string, speaker: Speaker, textSoFar: string) => void;
   onCue: (cue: Cue) => void;
   onStatus: (status: AvatarStatus, detail?: string) => void;
 }
