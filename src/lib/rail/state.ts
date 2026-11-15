@@ -324,8 +324,9 @@ export function planNote(scheme: MarkScheme, results: CriterionResult[], transcr
   const cur = scheme.criteria.find((c) => c.id === plan.current);
   // Pace (T33): a student does not quiz after every answer. After a turn where she asked, her next turn is a
   // reaction (say back one thing they said, invite them to go on); only after a reaction does she ask again.
-  const lastSam = [...transcript].reverse().find((l) => l.speaker === "avatar")?.text ?? "";
-  const react = lastSam.includes("?");
+  // At most one question in three turns: she reacts if either of her last two lines asked something.
+  const lastTwo = transcript.filter((l) => l.speaker === "avatar").slice(-2);
+  const react = lastTwo.some((l) => l.text.includes("?"));
   return [
     PRIVATE_NOTE,
     react
