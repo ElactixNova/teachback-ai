@@ -5,7 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
-import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote } from "@/lib/rail/state";
+import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote, planNext } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
 import { spokenToLatex } from "@/lib/math/spoken";
@@ -201,12 +201,17 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       stopWatch = watchRail(actions, session.addContext);
       let boardTurn = 0;
       let lastPlan = "";
+      const told = new Set<string>();
+      let pendingNext: string | null = null;
       planAhead = (justSaid) => {
         const { markScheme, results, transcript, view } = actions.getRail();
         if (!markScheme || view !== "board") return;
         // The line she just said may not be in the workspace's transcript yet (it arrives a render later).
         const lines = transcript.some((l) => l.speaker === "avatar" && l.text === justSaid) ? transcript : [...transcript, { speaker: "avatar" as const, text: justSaid, t: "" }];
-        const note = planNote(markScheme, results, lines);
+        // The point the last note told her to ask, if she asked something this turn, counts as asked however she worded it.
+        if (pendingNext && /\?/.test(justSaid)) told.add(pendingNext);
+        pendingNext = planNext(markScheme, results, lines, told).next?.id ?? null;
+        const note = planNote(markScheme, results, lines, told);
         if (note === lastPlan) return;
         lastPlan = note;
         session.addContext(note);

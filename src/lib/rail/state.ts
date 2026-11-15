@@ -293,8 +293,10 @@ export interface NextPlan {
 }
 
 /** What Sam may ask after her current question: at most one follow-up on it, then one new point. Never an old one. */
-export function planNext(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = []): NextPlan {
+export function planNext(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = []): NextPlan {
   const { counts, current } = askedCounts(scheme, transcript);
+  // Points the plan told her to ask and she then asked something: counted even if she reworded it past recognition (T33).
+  for (const id of told) counts[id] = Math.max(counts[id] ?? 0, 1);
   const result = (id: string) => results.find((r) => r.criterionId === id);
   const settled = (id: string) => ["full", "parked"].includes(result(id)?.status ?? "");
   const fresh = scheme.criteria.filter((c) => !counts[c.id] && !settled(c.id));
@@ -316,8 +318,8 @@ export function askLine(c: { title: string; probe?: string; ask?: "say" | "write
  * The private note Sam gets right after she asks a question: what is off limits, and the single new
  * question that may follow. Facts and one instruction, short enough to be followed.
  */
-export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = []): string {
-  const plan = planNext(scheme, results, transcript);
+export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = []): string {
+  const plan = planNext(scheme, results, transcript, told);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   const cur = scheme.criteria.find((c) => c.id === plan.current);
   // Pace (T33): a student does not quiz after every answer. After a turn where she asked, her next turn is a
@@ -341,7 +343,7 @@ export function planNote(scheme: MarkScheme, results: CriterionResult[], transcr
     react
       ? ""
       : plan.next
-      ? `Your next new question, once they have answered: ${askLine(plan.next)}. Ask only that.`
+      ? `Your next new question, once they have answered: ${askLine(plan.next)}. Ask only that, unless they have already explained it in their own words earlier: then ask about one specific detail of what they said instead.`
       : "Every point has now been asked. After their answer, call get_rail_status: it lists any point to go back over once.",
     plan.left > 0 ? `${plan.left} point${plan.left === 1 ? " has" : "s have"} not been asked yet, so do not offer or mention their results.` : "",
   ]
