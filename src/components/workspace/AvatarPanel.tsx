@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Clock3, Download, Frown, LoaderCircle, Mic, MicOff, PenLine, Smile, Sparkle, Video, VideoOff, type LucideIcon } from "lucide-react";
 import type { Cue } from "@/types/session";
 import { ANAM_VIDEO_ID, type AvatarStatus, type Speaker, type TranscriptLine } from "./types";

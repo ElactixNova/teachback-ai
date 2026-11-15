@@ -17,14 +17,15 @@ export function WhatYouSaid({ result }: { result: CriterionResult }) {
   const long = !!said && said.length > CLAMP_CHARS;
 
   return (
-    <div className="min-w-0 rounded-xl bg-canvas p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-        What you said{!said && quote ? ` · ${quote.timestamp}` : ""}
+    // Figma Gap Card (84:839) "You said": a Meta/SemiBold label over Body/Reading (summary) or Body/Quote (exact words).
+    <div className="min-w-0">
+      <p className="text-xs font-semibold leading-4 text-faint">
+        You said{!said && quote ? <span className="font-normal tabular-nums"> · {quote.timestamp}</span> : ""}
       </p>
 
       {said ? (
         <>
-          <p className={`mt-1.5 text-[15px] leading-6 ${long && !expanded ? "line-clamp-4" : ""}`}>
+          <p className={`mt-1.5 text-base leading-6 tracking-[-0.005em] text-ink ${long && !expanded ? "line-clamp-4" : ""}`}>
             <MathText text={said} />
           </p>
           {long && (
@@ -50,11 +51,11 @@ export function WhatYouSaid({ result }: { result: CriterionResult }) {
           )}
         </>
       ) : quote ? (
-        <blockquote className="mt-1.5 text-[15px] italic leading-6">
+        <blockquote className="mt-1.5 text-base italic leading-6 tracking-[-0.005em] text-ink">
           “<SpokenMath text={quote.quote} />”
         </blockquote>
       ) : (
-        <p className="mt-1.5 text-sm italic text-muted">You didn’t say anything about this yet.</p>
+        <p className="mt-1.5 text-base leading-6 text-faint">You didn’t say anything about this yet.</p>
       )}
     </div>
   );
