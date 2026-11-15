@@ -322,11 +322,11 @@ test("T32 planNote: names the one new question, what is off limits, the board re
   // After a reaction (no question) she may ask again; right after a question her next turn is a reaction.
   const reacted = [...session, said("03:50", "student", "Done."), said("03:51", "avatar", "Okay, so you wrote it out step by step."), said("03:55", "student", "yes"), said("03:56", "avatar", "Mm, that is neat.")];
   const note = planNote(quad, untouched(quad), reacted);
-  assert.match(note, /PACE: react in a few fresh words, then ask ONE new question/);
+  assert.match(note, /PACE: react in a few fresh words, then ask the ONE question given below/);
   assert.match(note, /^PRIVATE NOTE/);
   assert.match(note, /Already asked, never ask about these again in any wording: .*The quadratic formula.*Completing the square.*Choosing a method/);
   assert.match(note, /board task: when they say they are done, call capture_whiteboard before you say anything/);
-  assert.match(note, /Your next new question, once they have answered: "Could you sketch the graph of \$y = x\^2 - 2x - 3\$\?" \(a board task/);
+  assert.match(note, /Your question this turn: "Could you sketch the graph of \$y = x\^2 - 2x - 3\$\?" \(a board task/);
   assert.match(note, /2 points have not been asked yet, so do not offer or mention their results/);
   assert.doesNotMatch(note, /\[|\]/);
   // When every point has been asked, the report is no longer held back and the sweep takes over.
@@ -354,11 +354,10 @@ test("T32 rail status: a point already asked twice is never the next question, a
 
 test("T37 pacing: a follow-on turn ends with a hook, never a flat statement, and names no new question", () => {
   const note = planNote(quad, untouched(quad), [...session, said("03:50", "student", "x equals minus b"), said("03:51", "avatar", "Is that the height?")], [], false);
-  assert.match(note, /follow-on, not a new point/);
-  assert.match(note, /END WITH A HOOK/);
-  assert.match(note, /they are waiting for YOU/);
-  assert.doesNotMatch(note, /Your next new question/);
+  assert.match(note, /NO question this turn/);
+  assert.match(note, /Go on, I'm following/);
+  assert.match(note, /they are waiting for you/);
+  assert.doesNotMatch(note, /Your question this turn/);
   const fresh = planNote(quad, untouched(quad), session, [], true);
-  assert.match(fresh, /Your next new question/);
-  assert.match(fresh, /If they only said yes, okay, done or what now/);
-});
+  assert.match(fresh, /Your question this turn/);
+  });
