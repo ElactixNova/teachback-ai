@@ -51,6 +51,12 @@ function passiveTeacher(transcript) {
 
 async function teacherSays(topic, transcript, style) {
   if (style === "passive") return passiveTeacher(transcript);
+  // The finisher teaches for three turns, then only says it is done (Sam must not ask "anything to add?" more than once).
+  if (style === "finisher") {
+    const mine = transcript.filter((l) => l.speaker === "student").length;
+    if (mine >= 4) return ["No, that should be all.", "That's all.", "Nope, finished."][(mine - 4) % 3];
+    style = "explainer";
+  }
   const convo = transcript.map((l) => `${l.speaker === "avatar" ? "Sam" : "You"}: ${l.text}`).join("\n");
   const out = await ask(
     `You are a GCSE student who is TEACHING the topic "${topic}" to a classmate called Sam, typing your messages. ${STYLES[style]} You know the topic well. If Sam asks you to write something on the whiteboard, reply with exactly: BOARD. Never ask Sam questions about the topic more than rarely. Reply with only your next message.`,
@@ -111,8 +117,9 @@ await browser.close();
 const samLinesOut = lines.filter((l) => l.speaker === "avatar");
 const flat = samLinesOut.filter((l) => !/\?|\b(go on|carry on|keep going|continue|tell me more|what happens next)\b/i.test(l.text));
 const whatNow = lines.filter((l) => l.speaker === "student" && /^\W*what now\??\W*$/i.test(l.text)).length;
+const anything = samLinesOut.filter((l) => /anything to add/i.test(l.text)).length;
 console.log(`
-METRICS: ${flat.length} flat Sam lines (no question or invitation) of ${samLinesOut.length}; teacher had to say "What now?" ${whatNow} times`);
+METRICS: ${flat.length} flat Sam lines (no question or invitation) of ${samLinesOut.length}; teacher had to say "What now?" ${whatNow} times; "anything to add" asked ${anything} times`);
 const text = lines.map((l) => `${l.t} ${l.speaker === "avatar" ? "Sam" : "Teacher"}: ${l.text}`).join("\n");
 fs.mkdirSync(path.join(here, "out"), { recursive: true });
 console.log(text);

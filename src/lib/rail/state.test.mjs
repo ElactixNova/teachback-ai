@@ -375,5 +375,10 @@ test("T39 pushed rail notes are facts only: they never name a next question or a
 test("T41 pacing: a finished answer is not met with 'keep going'", () => {
   const note = planNote(scheme, emptyResults(scheme), [], [], false);
   assert.match(note, /FINISHED with it: never say keep going/);
-  assert.match(note, /Anything to add, or shall I move on/);
+  // A point is still open: finishing leads to the next question, not to 'anything to add'.
+  assert.match(note, /then ask: /);
+  assert.doesNotMatch(note, /Anything to add/);
+  // Every point asked: she checks once, and a 'that's all' goes to the report.
+  const allAsked = planNote(scheme, emptyResults(scheme), [], scheme.criteria.map((c) => c.id), false);
+  assert.match(allAsked, /Anything to add, or shall I move on\?\" ONCE.*do NOT ask it again.*check your report/);
 });
