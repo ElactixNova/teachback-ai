@@ -16,7 +16,7 @@ import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/bo
 import { spokenToLatex } from "@/lib/math/spoken";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
 import { downloadText, formatTranscript, transcriptFileName } from "./transcriptExport";
-import { diagLines } from "@/lib/anam/diag";
+import { diag, diagLines } from "@/lib/anam/diag";
 import { analyzeFinal, readBoard, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
 import {
   ANAM_VIDEO_ID,
@@ -379,7 +379,11 @@ export function Workspace() {
       finishSession,
       getReport: () => latest.current.report,
       generateVisualExplainer: (id?: string) => generateVisualExplainer(id),
-      writeOnBoard: (note) => boardRef.current?.addNote(note) ?? { status: "hidden" },
+      writeOnBoard: (note) => {
+        const out = boardRef.current?.addNote(note) ?? { status: "hidden" as const };
+        diag("tool", `board write "${note.content.slice(0, 50)}" -> ${out.status}`);
+        return out;
+      },
       speechProgress: (chars, done) => boardRef.current?.speech(chars, done),
     }),
     [parkCriterion, checkExplanation, finishSession, generateVisualExplainer, flushLive],
@@ -448,6 +452,7 @@ export function Workspace() {
   }, [handlers]);
 
   const connect = useCallback(async () => {
+    if (!latest.current.markScheme) return; // never start Sam without a mark scheme (she would ramble)
     sessionRef.current?.disconnect();
     sessionRef.current = null;
     sessionStart.current ??= Date.now();
@@ -607,6 +612,15 @@ export function Workspace() {
             liveLines={liveLines}
             onDownloadTranscript={downloadTranscript}
             onConnect={() => void connect()}
+            startBlockedReason={
+              !curriculum
+                ? "Upload your lecture notes first: Sam needs them to know what to ask."
+                : scheme.status === "loading"
+                ? "Building your mark scheme… Sam can join in a few seconds."
+                : scheme.status !== "ready"
+                ? "The mark scheme is not ready, so Sam cannot start yet. Re-upload or redraft it."
+                : undefined
+            }
             onDisconnect={disconnect}
             onTypedLine={(text) => {
               addLine("student", text);

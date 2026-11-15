@@ -245,7 +245,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   const notesRef = useRef<SamNote[]>([]);
   const noteId = useRef(0);
   // A queued question is only worth writing while it is fresh: one that waited behind the student's pen is dropped (T39).
-  const pendingNotes = useRef<{ input: NoteInput; at: number }[]>([]);
+  const pendingNotes = useRef<{ input: NoteInput; at: number; strokes: number }[]>([]);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteDrag = useRef<{ id: number; x: number; y: number } | null>(null);
   const updateNotes = useCallback((fn: (ns: SamNote[]) => SamNote[]) => {
@@ -419,7 +419,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
     const hidden = (wrapRef.current?.getBoundingClientRect().width ?? 0) < 1;
     if (hidden || current.current || pointers.current.size > 0 || notesRef.current.some((n) => n.clock)) return;
     const now = performance.now();
-    pendingNotes.current = pendingNotes.current.filter((p) => now - p.at < STALE_NOTE_MS);
+    // Dropped when it is stale, or when the student has already put pen to the board since it was queued: they are answering it (T48).
+    pendingNotes.current = pendingNotes.current.filter((p) => now - p.at < STALE_NOTE_MS && strokes.current.length <= p.strokes);
     const next = pendingNotes.current.shift();
     if (next) placeNow(next.input);
   }, [placeNow]);
@@ -453,12 +454,12 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
       // Never while the board is hidden (results view) or the pen is down: the note would land under
       // their hand or move the board mid-stroke.
       if (hidden) {
-        pendingNotes.current.push({ input, at: performance.now() });
+        pendingNotes.current.push({ input, at: performance.now(), strokes: strokes.current.length });
         return { status: "hidden" };
       }
       // One question at a time: a second one waits for the pen to finish the first.
       if (busy || noteTimer.current || notesRef.current.some((n) => n.clock)) {
-        pendingNotes.current.push({ input, at: performance.now() });
+        pendingNotes.current.push({ input, at: performance.now(), strokes: strokes.current.length });
         return { status: "queued" };
       }
       return placeNow(input);

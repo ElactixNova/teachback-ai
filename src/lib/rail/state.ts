@@ -334,6 +334,8 @@ export function nextStep(scheme: MarkScheme, results: CriterionResult[], transcr
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   if (offer.kind === "follow" && plan.followUp) return `ask ONE follow-up on \"${title(plan.followUp.id)}\", leading them to this without stating it: \"${plan.followUp.missing}\".`;
   if (offer.kind === "new" && plan.next) return `ask: ${askLine(plan.next)}.`;
+  // Asked already (they kept adding, as students do): never again, one is enough.
+  if (transcript.some((l) => l.speaker === "avatar" && /anything to add/i.test(l.text))) return "ask nothing more (you have already asked \"anything to add\" once, and one is enough). If they say they are done, say \"Okay, let me check your report\" and call get_rail_status.";
   return "ask \"Anything to add, or shall I move on?\" ONCE. If they answer with anything like nothing to add, that's all, no, nope, finished, move on or let's move on, do NOT ask it again: say \"Okay, let me check your report\" and call get_rail_status.";
 }
 

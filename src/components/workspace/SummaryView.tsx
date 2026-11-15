@@ -82,7 +82,11 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
 
         <section aria-label="Revision notes" className="space-y-3">
           <h2 className="text-lg font-semibold">Revision notes</h2>
-          {gaps.length === 0 && <p className="text-sm text-muted">Full marks on every point. Nothing to revise.</p>}
+          {gaps.length === 0 && (
+            <p className="text-sm text-muted">
+              {report.awarded >= report.total ? "Full marks on every point. Nothing to revise." : report.awarded === 0 ? "No marks yet: nothing was explained, so there is nothing to revise. Go back to the session and teach Sam." : "No explanations to revise yet. Teach the points you have not covered, then check again."}
+            </p>
+          )}
           {gaps.length > 0 && notes.status === "loading" && (
             <div className="flex items-center gap-3 rounded-2xl border border-line p-4" role="status">
               <LoaderCircle className="h-5 w-5 animate-spin text-accent" />

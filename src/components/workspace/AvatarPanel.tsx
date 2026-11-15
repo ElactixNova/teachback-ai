@@ -43,6 +43,8 @@ interface Props {
   /** Save the raw transcript as a .txt. */
   onDownloadTranscript?: () => void;
   onConnect: () => void;
+  /** Why Sam cannot join yet (no lecture notes or no mark scheme): the start button is off and says so. */
+  startBlockedReason?: string;
   onDisconnect: () => void;
   /** Typed fallback: lets the demo work without a mic or live avatar. */
   onTypedLine: (text: string) => void;
@@ -52,7 +54,7 @@ interface Props {
   waiting?: boolean;
 }
 
-export function AvatarPanel({ status, statusDetail, cue, transcript, liveLines = [], onDownloadTranscript, onConnect, onDisconnect, onTypedLine, children, waiting = false }: Props) {
+export function AvatarPanel({ status, statusDetail, cue, transcript, liveLines = [], onDownloadTranscript, onConnect, startBlockedReason, onDisconnect, onTypedLine, children, waiting = false }: Props) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -128,13 +130,13 @@ export function AvatarPanel({ status, statusDetail, cue, transcript, liveLines =
                 ? "Waking up Sam, your student…"
                 : status === "error"
                   ? statusDetail || "Could not connect to the avatar."
-                  : "Sam joins when you start the session."}
+                  : startBlockedReason ?? "Sam joins when you start the session."}
             </p>
             <button
               type="button"
               onClick={onConnect}
-              disabled={status === "connecting"}
-              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:opacity-70"
+              disabled={status === "connecting" || !!startBlockedReason}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:opacity-50"
             >
               {status === "connecting" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
               {status === "error" ? "Try again" : "Start session"}
