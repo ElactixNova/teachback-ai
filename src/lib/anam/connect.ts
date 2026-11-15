@@ -114,14 +114,34 @@ export async function connectAnam(opts: {
       console.warn("[anam] addContext failed", e);
     }
   };
+  // Noise guard (T53): Anam interrupts Sam the moment its voice detection hears anything, so in a loud room (a pitch,
+  // a hall) a cough or a neighbour cuts her off. While she is talking the microphone is muted, and it comes back a
+  // beat after she stops. The same timer that releases held notes also releases the mic, so it can never stay off.
+  // NEXT_PUBLIC_MIC_GUARD=off turns it off (full barge-in again).
+  const guard = process.env.NEXT_PUBLIC_MIC_GUARD !== "off";
+  let unmuteTimer: ReturnType<typeof setTimeout> | null = null;
+  const mic = (mute: boolean) => {
+    if (!guard || !client?.isStreaming()) return;
+    try {
+      if (mute) client.muteInputAudio();
+      else client.unmuteInputAudio();
+    } catch (e) {
+      console.warn("[anam] mic mute failed", e);
+    }
+  };
   const flush = () => {
     if (speakingTimer) clearTimeout(speakingTimer);
     speakingTimer = null;
     speaking = false;
     for (const note of waiting.splice(0)) push(note);
+    // A short tail so the end of her own voice is not picked up as the student starting to talk.
+    if (unmuteTimer) clearTimeout(unmuteTimer);
+    unmuteTimer = setTimeout(() => mic(false), 350);
   };
   const setSpeaking = (now: boolean) => {
     if (!now) return flush();
+    if (!speaking) mic(true);
+    if (unmuteTimer) clearTimeout(unmuteTimer);
     speaking = true;
     if (speakingTimer) clearTimeout(speakingTimer);
     speakingTimer = setTimeout(flush, 15_000);
@@ -131,6 +151,7 @@ export async function connectAnam(opts: {
     closedByUs = true;
     window.removeEventListener("pagehide", onPageHide);
     cleanupTools();
+    if (unmuteTimer) clearTimeout(unmuteTimer);
     void client?.stopStreaming().catch(() => {});
     client = null;
     handlers.onStatus("idle");

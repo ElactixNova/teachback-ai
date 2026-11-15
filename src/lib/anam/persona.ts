@@ -33,7 +33,7 @@ export interface AnamPersonaConfig {
   maxSessionLengthSeconds: number;
   initialMessage: string;
   directorNotes: { presetStyle: "warm"; expressivity: number };
-  voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: number; silenceBeforeSessionEndSeconds: number; endOfSpeechSensitivity: number };
+  voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: number; silenceBeforeSessionEndSeconds: number; endOfSpeechSensitivity: number; speechEnhancementLevel: number };
   tools: AnamClientToolDefinition[];
 }
 
@@ -146,7 +146,7 @@ export function buildPersonaConfig(ctx: PersonaContext = {}): AnamPersonaConfig 
     // board is quiet for longer than both. 0 = never prompt; 300 = five quiet minutes before the session ends.
     // endOfSpeechSensitivity: "how eager the persona is to start speaking" (0-1, default 0.5). Lower, so Sam
     // waits longer after the student stops before replying.
-    voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: 0, silenceBeforeSessionEndSeconds: 300, endOfSpeechSensitivity: 0.3 },
+    voiceDetectionOptions: { silenceBeforeSkipTurnSeconds: 0, silenceBeforeSessionEndSeconds: 300, endOfSpeechSensitivity: 0.3, speechEnhancementLevel: 1 },
     tools: rail ? RAIL_TOOLS : CLIENT_TOOLS,
   };
 }
