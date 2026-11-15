@@ -62,9 +62,9 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
     }),
     client.registerToolCallHandler(TOOL.getRailStatus, {
       onStart: async () => {
-        const { markScheme, results, focusIds } = actions.getRail();
+        const { markScheme, results, focusIds, transcript } = actions.getRail();
         if (!markScheme) return "There is no mark scheme yet. Ask the student what they want to teach you.";
-        return railStatusText(markScheme, results, focusIds);
+        return railStatusText(markScheme, results, focusIds, transcript);
       },
     }),
     client.registerToolCallHandler(TOOL.parkCriterion, {

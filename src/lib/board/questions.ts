@@ -8,6 +8,8 @@ import { MAX_NOTES_PER_SESSION, admitNote, plainMath, type NoteInput, type NoteO
 /** Verbs and openers that make a sentence something the student has to work on. */
 const INSTRUCTION =
   /\b(solve|find|work out|calculate|simplify|factori[sz]e|expand|evaluate|differentiate|integrate|rearrange|complete the square|what is|what are|what's|what would|how many|how much)\b/i;
+/** Content that is a result to produce rather than a question: a formula, a definition, a plus-or-minus expression. */
+const ANSWER_LIKE = /\\pm|\u00b1|formula|definition|theorem/i;
 const MATHS_WORDS = /\b(squared|cubed|plus|minus|times|multiplied by|divided by|over|equals?|to the power|square root|root of|percent)\b/gi;
 
 /** Splits text into finished sentences and the unfinished rest. A dot between digits (1.5) does not end a sentence. */
@@ -177,6 +179,10 @@ export function createQuestionWriter(write: (note: NoteInput) => NoteOutcome, op
     /** Sam called write_on_board. Returns what to tell her. */
     async tool(input: NoteInput): Promise<string> {
       const asked = now() - askedAt < ASKED_WINDOW_MS;
+      // The board holds Sam's questions ("Solve ...", "Find ..."), never a formula or answer the student is meant to produce.
+      if (!asked && ANSWER_LIKE.test(input.content) && !INSTRUCTION.test(input.content)) {
+        return "Nothing was written: the board only holds a question to work on (Solve ..., Find ...), never a formula or answer. If you are asking them to write or state something, let them write it themselves.";
+      }
       const picked = pickQuestion(input.content, asked && last ? await last : null, asked);
       askedAt = -Infinity;
       toolAt = now();
