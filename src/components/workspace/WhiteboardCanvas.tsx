@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Eraser, LoaderCircle, Maximize, Minus, Move, Pen, Plus, ScanSearch, SkipForward, Trash2, Undo2 } from "lucide-react";
 import type { WhiteboardSnapshot } from "@/types/session";
+import { MathText } from "./MathText";
 import {
   HAND,
   NOTE_MARGIN,
@@ -930,13 +931,13 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
                 type="button"
                 onClick={skip.onSkip}
                 disabled={checking}
-                title={`Skip "${plainMath(skip.title)}": Sam stops asking about it and it goes in your report`}
+                title="Sam stops asking about this point; it goes in your report"
                 className="pointer-events-auto inline-flex min-h-11 max-w-[min(320px,60vw)] items-center gap-2 rounded-full border border-line bg-card/95 px-4 py-1.5 text-left shadow-[var(--shadow-1)] transition hover:bg-canvas disabled:opacity-60"
               >
                 <SkipForward className="h-4 w-4 shrink-0 text-muted" aria-hidden />
                 <span className="min-w-0 leading-tight">
                   <span className="block text-sm font-semibold">Skip this point</span>
-                  <span className="block truncate text-xs text-muted">{plainMath(skip.title)}</span>
+                  <MathText text={skip.title} className="block truncate text-xs text-muted" />
                 </span>
               </button>
             )}
