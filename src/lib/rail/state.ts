@@ -338,7 +338,7 @@ export function planNote(scheme: MarkScheme, results: CriterionResult[], transcr
   return [
     PRIVATE_NOTE,
     react
-      ? "PACE: NO question this turn. Say a few fresh words about ONE thing they just said (never \"Okay, so you said\", never repeat their answer back, never judge it), then end with one of these invitations, word for word or very close: \"Go on, I'm following.\" / \"Mm, and then?\" / \"Okay, keep going.\" / \"Take your time, I'm listening.\" The only exception: one small question about something they just DREW or WROTE (\"Is that dashed line the height?\"). If they only said yes, okay, done or what now, they are waiting for you: that is your cue to ask your next question. If they asked or offered something (\"do you want me to draw it?\"), answer it at once and out loud (\"Yes please, draw it for me\") and never leave it hanging."
+      ? "PACE: NO question this turn. Say a few fresh words about ONE thing they just said (never \"Okay, so you said\", never repeat their answer back, never judge it), then end with one of these invitations, word for word or very close: \"Go on, I'm following.\" / \"Mm, and then?\" / \"Okay, keep going.\" / \"Take your time, I'm listening.\" The only exception: one small question about something they just DREW or WROTE (\"Is that dashed line the height?\"). If they said okay or yes to something you just asked them to do (draw it, write it), they are about to do it: say so in a few words (\"Take your time\") and wait, never ask it again. If they only said done or what now, they are waiting for you: that is your cue to ask your next question. If they asked or offered something (\"do you want me to draw it?\"), answer it at once and out loud (\"Yes please, draw it for me\") and never leave it hanging."
       : "PACE: react in a few fresh words, then ask the ONE question given below, and nothing else. If they said what they will cover next or invited you to choose, follow their lead. If they asked or offered something, answer it first.",
     plan.asked.length ? `Already asked, never ask about these again in any wording: ${plan.asked.map(title).join("; ")}.` : "",
     cur && (cur.ask === "write" || cur.ask === "draw")
@@ -374,7 +374,7 @@ export function askedNote(transcript: TimedLine[] = []): string {
 }
 
 /** What the avatar gets back from get_rail_status: short, factual, no answers. */
-export function railStatusText(scheme: MarkScheme, results: CriterionResult[], focusIds: string[] = [], transcript: TimedLine[] = []): string {
+export function railStatusText(scheme: MarkScheme, results: CriterionResult[], focusIds: string[] = [], transcript: TimedLine[] = [], directives = true): string {
   const { awarded, total } = railScore(scheme, results);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   const pick = (s: CriterionStatus[]) => results.filter((r) => s.includes(r.status)).map((r) => title(r.criterionId));
@@ -415,21 +415,23 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
     `Not covered yet: ${list(pick(["not_covered"]))}.`,
     active ? `They are explaining now: ${title(active)}.` : "",
     focus.length ? `They chose to work on: ${focus.map((r) => title(r.criterionId)).join("; ")}.` : "",
-    sweep.length
+    !directives
+      ? ""
+      : sweep.length
       ? `SWEEP: every point has been touched, but these still lost marks, and they may know it and have just forgotten to say it: ${sweep
           .map((r) => `"${title(r.criterionId)}" (not yet said: "${r.missingSteps[0]}")`)
           .join("; ")}. Take ONE of them per turn, in this order: one short curious nudge towards the missing part, never stating it. Nudge each point only once: skip the ones you have already nudged since this sweep began, and when none are left suggest they say they are finished so you can open their report.`
       : followUp
       ? `FIRST, before moving on, follow up on "${title(followUp.criterionId)}": they have not yet made this point: "${followUp.missingSteps[0]}". Ask ONE short curious question that leads them towards it, and nothing else this turn. Never state it. If they cannot, move on.`
       : "",
-    sweep.length
+    !directives || sweep.length
       ? ""
       : nextUp && nextUp.criterionId === active
       ? `Next question: keep going on "${title(nextUp.criterionId)}" with one curious question about what they have not explained yet.${nextAsk} Never give the answer.`
       : nextUp
       ? `Next question: ${followUp ? "only in a LATER turn, once that follow-up is answered or given up, " : "when they have finished their answer, "}move to "${title(nextUp.criterionId)}".${nextAsk} Never give the answer.`
       : "Everything has been addressed. Suggest they say they are finished so you can open their report.",
-    "Start your reply by reacting in a few words to what they just said.",
+    directives ? "Start your reply by reacting in a few words to what they just said." : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -469,7 +471,8 @@ export function railChangeNote(scheme: MarkScheme, before: CriterionResult[], af
     nowParked.length
       ? `Parked: ${nowParked.join("; ")}. Do not ask about these again; if it fits, say warmly that you will park it for the report and move on.`
       : "",
-    railStatusText(scheme, after, focusIds),
+    // Facts only: the pacing note owns what Sam asks next (a status note that names a "next question" re-asked points, T39).
+    railStatusText(scheme, after, focusIds, [], false),
   ]
     .filter(Boolean)
     .join(" ");
