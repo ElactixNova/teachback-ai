@@ -322,7 +322,7 @@ test("T32 planNote: names the one new question, what is off limits, the board re
   // After a reaction (no question) she may ask again; right after a question her next turn is a reaction.
   const reacted = [...session, said("03:50", "student", "Done."), said("03:51", "avatar", "Okay, so you wrote it out step by step.")];
   const note = planNote(quad, untouched(quad), reacted);
-  assert.match(note, /PACE: you have just reacted, so your next turn may ask one question/);
+  assert.match(note, /PACE: your next reply may include ONE question/);
   assert.match(note, /^PRIVATE NOTE/);
   assert.match(note, /Already asked, never ask about these again in any wording: .*The quadratic formula.*Completing the square.*Choosing a method/);
   assert.match(note, /board task: when they say they are done, call capture_whiteboard before you say anything/);

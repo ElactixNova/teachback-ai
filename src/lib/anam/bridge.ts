@@ -116,8 +116,8 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
         const { markScheme, results } = actions.getRail();
         const seen = markScheme ? boardNote(markScheme, results) : "";
         return seen
-          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply.`
-          : "They have drawn on the whiteboard and the examiner is reading it now (within about 20 seconds). Acknowledge it in a few words, never ask them to repeat it aloud, and carry on.";
+          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply, using only what is written above and adding no detail of your own.`
+          : "They have drawn on the whiteboard but you cannot make out what it says. Do NOT describe or guess any content. Say honestly that you cannot quite read it and ask what they wrote.";
       },
     })),
     client.registerToolCallHandler(TOOL.generateVisualExplainer, {
@@ -200,7 +200,6 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       });
       stopWatch = watchRail(actions, session.addContext);
       let boardTurn = 0;
-      let lastPlan = "";
       const told = new Set<string>();
       let pendingNext: string | null = null;
       planAhead = (justSaid) => {
@@ -212,8 +211,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         if (pendingNext && /\?/.test(justSaid)) told.add(pendingNext);
         pendingNext = planNext(markScheme, results, lines, told).next?.id ?? null;
         const note = planNote(markScheme, results, lines, told);
-        if (note === lastPlan) return;
-        lastPlan = note;
+        // Always sent, even when identical to the last one: the pacing instruction has to arrive before every reply.
         session.addContext(note);
       };
 
