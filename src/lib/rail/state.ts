@@ -320,18 +320,27 @@ export function planNote(scheme: MarkScheme, results: CriterionResult[], transcr
   const plan = planNext(scheme, results, transcript);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   const cur = scheme.criteria.find((c) => c.id === plan.current);
+  // Pace (T33): a student does not quiz after every answer. After a turn where she asked, her next turn is a
+  // reaction (say back one thing they said, invite them to go on); only after a reaction does she ask again.
+  const lastSam = [...transcript].reverse().find((l) => l.speaker === "avatar")?.text ?? "";
+  const react = lastSam.includes("?");
   return [
     PRIVATE_NOTE,
+    react
+      ? "PACE: after they answer, do NOT ask a question on your next turn. Say back in your own words ONE specific thing they just said, using their own words or numbers, then invite them to carry on (for example \"Okay, so you ... mm, go on\"). If something they said confuses you or seems to contradict itself, say which part confuses you instead. Keep it to one or two short sentences."
+      : "PACE: you have just reacted, so your next turn may ask one question.",
     plan.asked.length ? `Already asked, never ask about these again in any wording: ${plan.asked.map(title).join("; ")}.` : "",
     cur && (cur.ask === "write" || cur.ask === "draw")
       ? "Your current question is a board task: when they say they are done, call capture_whiteboard before you say anything, then mention one specific thing you can see in what they wrote."
       : "",
-    plan.followUp
+    !react && plan.followUp
       ? `If their answer leaves it out, you may ask ONE follow-up on "${title(plan.followUp.id)}" about this, without stating it: "${plan.followUp.missing}".`
       : cur
       ? `Do not ask a second question about "${cur.title}".`
       : "",
-    plan.next
+    react
+      ? ""
+      : plan.next
       ? `Your next new question, once they have answered: ${askLine(plan.next)}. Ask only that.`
       : "Every point has now been asked. After their answer, call get_rail_status: it lists any point to go back over once.",
     plan.left > 0 ? `${plan.left} point${plan.left === 1 ? " has" : "s have"} not been asked yet, so do not offer or mention their results.` : "",

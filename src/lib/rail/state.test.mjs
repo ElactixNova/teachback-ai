@@ -319,7 +319,10 @@ test("T32 planNext: after 'Done.' at 03:45 the next question is a NEW point, not
 });
 
 test("T32 planNote: names the one new question, what is off limits, the board read, and holds the report back", () => {
-  const note = planNote(quad, untouched(quad), session);
+  // After a reaction (no question) she may ask again; right after a question her next turn is a reaction.
+  const reacted = [...session, said("03:50", "student", "Done."), said("03:51", "avatar", "Okay, so you wrote it out step by step.")];
+  const note = planNote(quad, untouched(quad), reacted);
+  assert.match(note, /PACE: you have just reacted, so your next turn may ask one question/);
   assert.match(note, /^PRIVATE NOTE/);
   assert.match(note, /Already asked, never ask about these again in any wording: .*The quadratic formula.*Completing the square.*Choosing a method/);
   assert.match(note, /board task: when they say they are done, call capture_whiteboard before you say anything/);
@@ -327,7 +330,7 @@ test("T32 planNote: names the one new question, what is off limits, the board re
   assert.match(note, /2 points have not been asked yet, so do not offer or mention their results/);
   assert.doesNotMatch(note, /\[|\]/);
   // When every point has been asked, the report is no longer held back and the sweep takes over.
-  const all = [...session, said("03:46", "avatar", quad.criteria[9].probe), said("04:40", "student", "Done."), said("04:41", "avatar", quad.criteria[10].probe)];
+  const all = [...session, said("03:46", "avatar", quad.criteria[9].probe), said("04:40", "student", "Done."), said("04:41", "avatar", quad.criteria[10].probe), said("04:50", "student", "ok"), said("04:51", "avatar", "Mm, I see.")];
   const end = planNote(quad, untouched(quad), all);
   assert.match(end, /Every point has now been asked.*get_rail_status/);
   assert.doesNotMatch(end, /do not offer/);
@@ -347,4 +350,11 @@ test("T32 rail status: a point already asked twice is never the next question, a
   // When her last point is fine, nothing older is chased: straight to the next new point.
   const fine = lost.map((r) => (r.criterionId === "c8" ? { ...r, status: "full", missingSteps: [] } : r));
   assert.doesNotMatch(railStatusText(quad, fine, [], session), /FIRST, before moving on/);
+});
+
+test("T33 pacing: right after Sam asked, her next turn is a reaction with no question named", () => {
+  const asked = [...session, said("03:50", "student", "x equals minus b")];
+  const note = planNote(quad, untouched(quad), [...asked, said("03:51", "avatar", "What does the discriminant tell you?")]);
+  assert.match(note, /PACE: after they answer, do NOT ask a question/);
+  assert.doesNotMatch(note, /Your next new question/);
 });

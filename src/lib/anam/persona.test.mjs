@@ -10,7 +10,7 @@ const src = readFileSync(new URL("./persona.ts", import.meta.url), "utf8");
 test("rail prompt never plants 'unsure what to ask' for Sam to echo", () => {
   // The old RAIL rule said "when you are unsure what to ask next" and Sam echoed it to the student.
   assert.doesNotMatch(src, /when you are unsure what to ask/i);
-  assert.match(src, /ALWAYS KNOW THE NEXT QUESTION/);
+  assert.match(src, /YOU ARE THE STUDENT, NOT THE EXAMINER/);
 });
 
 test("rail prompt separates requests from answers and rewrites the SAME question on request", () => {
