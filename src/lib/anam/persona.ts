@@ -41,6 +41,11 @@ const MAX_EXCERPT = 4000;
 const MAX_TOPIC = 200;
 
 /** A topic goes straight into Sam's prompt: collapse whitespace and cap the length (from Vince's #7). */
+/** "Area of a triangle" read inside a sentence: first letter lower-case unless it starts an acronym ("DNA"). */
+function midSentence(topic: string): string {
+  return /^[A-Z][a-z]/.test(topic) ? topic.charAt(0).toLowerCase() + topic.slice(1) : topic;
+}
+
 export function cleanTopic(topic?: string): string | undefined {
   const t = topic?.replace(/\s+/g, " ").trim().slice(0, MAX_TOPIC);
   return t || undefined;
@@ -117,7 +122,7 @@ export function buildPersonaConfig(ctx: PersonaContext = {}): AnamPersonaConfig 
   const env = process.env;
   // Rail sessions open with the first point's own question, not a vague "teach me".
   const probe = ctx.criteria?.find((c) => c.probe)?.probe?.trim();
-  const opener = probe ? (ctx.topic ? `Let's do ${cleanTopic(ctx.topic)}. ${probe}` : probe) : "";
+  const opener = probe ? (ctx.topic ? `I really don't know much about ${midSentence(cleanTopic(ctx.topic) ?? "this")}, so I'm hoping you can teach me. ${probe}` : probe) : "";
   return {
     name: "Sam",
     avatarId: env.ANAM_AVATAR_ID || DEFAULTS.avatarId,
@@ -128,9 +133,9 @@ export function buildPersonaConfig(ctx: PersonaContext = {}): AnamPersonaConfig 
     systemPrompt: rail ? buildRailSystemPrompt(ctx) : buildSystemPrompt(ctx),
     maxSessionLengthSeconds: 900,
     initialMessage: opener
-      ? `[happy] Hi! I'm Sam. ${opener}`
+      ? `[happy] Oh hi, I'm Sam! ${opener}`
       : ctx.topic
-      ? `[happy] Hi! I'm ready to learn about ${ctx.topic}. Teach me, I'm all ears.`
+      ? `[happy] Oh hi, I'm Sam! I really don't know much about ${midSentence(ctx.topic)}, so I'm hoping you can teach me.`
       : "[happy] Hi! I'm Sam, your student today. What are you going to teach me?",
     directorNotes: { presetStyle: "warm", expressivity: 0.6 },
     // https://anam.ai/docs/personas/session/voice-detection.md. By default Anam makes the persona prompt a
