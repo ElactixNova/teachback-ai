@@ -146,7 +146,7 @@ try {
   }
 
   check("final analysis 200", await waitApi("/api/analyze", 200, TIMEOUT, "final"));
-  const notes = page.getByLabel("Gap notes").first();
+  const notes = page.getByLabel("Review", { exact: true }).first();
   await notes.waitFor({ timeout: 30000 }).catch(() => {});
   const gapText = (await notes.innerText().catch(() => "")).toLowerCase();
   // One gap at a time (Figma 84:805): gap 1 is the biggest gap.
