@@ -38,6 +38,8 @@ function Diagram({ note, visual, title, onRetry }: { note: RevisionNote; visual?
 export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRetryVisual, onTeachBack, onBack, onDownloadTranscript }: Props) {
   const gaps = gapsOf(scheme, report);
   const status = (id: string) => displayStatus(report.results.find((r) => r.criterionId === id));
+  // Points never addressed are not "gaps" (no result to fix) but they still lost every mark: list them, never say "full marks".
+  const notCovered = scheme.criteria.filter((c) => status(c.id) === "not_covered");
   const count = (s: string) => scheme.criteria.filter((c) => status(c.id) === s).length;
   const pct = report.total ? Math.round((report.awarded / report.total) * 100) : 0;
   const notesById = new Map(notes.status === "ready" ? notes.data.map((n) => [n.criterionId, n]) : []);
@@ -86,6 +88,29 @@ export function SummaryView({ scheme, report, notes, visuals, onRetryNotes, onRe
             <p className="text-sm text-muted">
               {report.awarded >= report.total ? "Full marks on every point. Nothing to revise." : report.awarded === 0 ? "No marks yet: nothing was explained, so there is nothing to revise. Go back to the session and teach Sam." : "No explanations to revise yet. Teach the points you have not covered, then check again."}
             </p>
+          )}
+          {notCovered.length > 0 && (
+            <article className="rounded-2xl border border-dashed border-line-strong p-4 sm:p-5">
+              <h3 className="font-semibold">
+                {notCovered.length === scheme.criteria.length ? "You didn’t cover any points yet" : `Not covered (${notCovered.length})`}
+              </h3>
+              <ul className="mt-2 space-y-1.5 text-sm">
+                {notCovered.map((c) => (
+                  <li key={c.id} className="flex items-center gap-2">
+                    <StatusIcon status="not_covered" />
+                    <MathText text={c.title} className="flex-1" />
+                    <span className="text-xs font-semibold text-faint">{c.marks} marks</span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => onTeachBack(notCovered.map((c) => c.id))}
+                className="mt-3 inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-accent hover:bg-accent-soft"
+              >
+                Teach these back <ArrowRight className="h-4 w-4" />
+              </button>
+            </article>
           )}
           {gaps.length > 0 && notes.status === "loading" && (
             <div className="flex items-center gap-3 rounded-2xl border border-line p-4" role="status">

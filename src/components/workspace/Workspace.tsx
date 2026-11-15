@@ -5,7 +5,7 @@ import { Flag, LoaderCircle, Sparkles } from "lucide-react";
 import type { CriterionResult, Cue, CurriculumContext, GapReport, MarkScheme, TimedLine, VisualExplainer } from "@/types/session";
 import { createAnamAvatarBridge } from "@/lib/anam/bridge";
 import { visualRequestForCriterion } from "@/lib/fal/request";
-import { emptyResults, finalizeReport, liveFocusId, mergeLiveResults, parkResult } from "@/lib/rail/state";
+import { emptyResults, finalizeReport, liveFocusId, mergeLiveResults, parkResult, skipTarget } from "@/lib/rail/state";
 import { useLiveAnalysis } from "@/lib/rail/useLiveAnalysis";
 import { AvatarPanel, type LiveLine } from "./AvatarPanel";
 import { CentrePanel } from "./CentrePanel";
@@ -497,6 +497,9 @@ export function Workspace() {
   const checking = check.status === "checking";
   const parkedIds = results.filter((r) => r.parked).map((r) => r.criterionId);
   const retryIds = parkedIds.length > 0 ? parkedIds : report && markScheme ? gapsOf(markScheme, report).map((g) => g.criterion.id) : [];
+  // "Skip this point": park the point Sam is on so she stops re-asking it. The rail watcher tells her it is parked.
+  const skipId = useMemo(() => (markScheme && transcript.length > 0 ? skipTarget(markScheme, results, timed(transcript)) : null), [markScheme, results, transcript]);
+  const skip = markScheme && skipId ? { title: markScheme.criteria.find((c) => c.id === skipId)?.title ?? "", onSkip: () => parkCriterion(skipId) } : null;
 
   return (
     <div className="flex h-dvh flex-col bg-canvas text-ink">
@@ -562,6 +565,7 @@ export function Workspace() {
               <WhiteboardCanvas
                 ref={boardRef}
                 checking={checking}
+                skip={skip}
                 onSnapAndCheck={() => void checkExplanation()}
                 onEmptyChange={setBoardEmpty}
                 onChange={onBoardChange}

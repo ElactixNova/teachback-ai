@@ -546,6 +546,19 @@ export function mergeLiveResults(scheme: MarkScheme, prev: CriterionResult[], in
 }
 
 /** Park a criterion in a results array (the UI's park button or the avatar's park_criterion). Full ones stay full. */
+/**
+ * The point the "Skip this point" button parks: the one Sam's last question was about, else the live
+ * focus, else the first open point in mark-scheme order. Null when every point is full or parked.
+ */
+export function skipTarget(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = []): string | null {
+  const open = (id: string) => {
+    const r = results.find((x) => x.criterionId === id);
+    return !r || (r.status !== "full" && r.status !== "parked" && !r.parked);
+  };
+  for (const id of [planNext(scheme, results, transcript).current, liveFocusId(results)]) if (id && open(id)) return id;
+  return scheme.criteria.find((c) => open(c.id))?.id ?? null;
+}
+
 export function parkResult(results: CriterionResult[], criterionId: string): CriterionResult[] {
   return results.map((r) =>
     r.criterionId === criterionId && r.status !== "full" ? { ...r, parked: true, status: "parked" as const, attempts: Math.max(r.attempts, 1) } : r,

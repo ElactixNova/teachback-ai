@@ -1,7 +1,7 @@
 // Run: node --test src/lib/rail/state.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyResults, finalizeReport, findCriterion, initialRail, liveFocusId, mergeLive, mergeLiveResults, mmss, parkResult, railChangeNote, railStatusText, toTimedLines, askLine, askedCounts, planNext, planNote, singleAsk, boardAnswerNote } from "./state.ts";
+import { emptyResults, finalizeReport, findCriterion, initialRail, liveFocusId, mergeLive, mergeLiveResults, mmss, parkResult, railChangeNote, railStatusText, toTimedLines, askLine, askedCounts, planNext, planNote, singleAsk, boardAnswerNote, skipTarget } from "./state.ts";
 
 const scheme = {
   topic: "Photosynthesis",
@@ -391,4 +391,17 @@ test("T44 board answer: the board is read as their answer, with the next step an
   const done = boardAnswerNote(scheme, emptyResults(scheme), [], scheme.criteria.map((c) => c.id));
   assert.match(done, /ONCE.*move on or let's move on.*do NOT ask it again/);
   assert.doesNotMatch(boardAnswerNote(null, [], []), /Then ask/);
+});
+
+test("skipTarget: the live focus first, then the first open point; parked and full points are never skipped again", () => {
+  const empty = emptyResults(scheme);
+  assert.equal(skipTarget(scheme, empty), "c1");
+  const focused = empty.map((x) => (x.criterionId === "c2" ? { ...x, status: "in_progress" } : x));
+  assert.equal(skipTarget(scheme, focused), "c2");
+  const c1Parked = parkResult(empty, "c1");
+  assert.equal(skipTarget(scheme, c1Parked), "c2");
+  const allDone = parkResult(c1Parked, "c2");
+  assert.equal(skipTarget(scheme, allDone), null);
+  const c1Full = empty.map((x) => (x.criterionId === "c1" ? { ...x, status: "full", awarded: 3 } : x));
+  assert.equal(skipTarget(scheme, c1Full), "c2");
 });
