@@ -494,7 +494,7 @@ export function Workspace() {
           </span>
           {report && view !== "notes" && (
             <button type="button" onClick={() => setView("notes")} className="hidden h-11 items-center rounded-full px-3 text-sm font-semibold text-muted hover:bg-accent-soft sm:inline-flex">
-              Gap notes
+              Review
             </button>
           )}
           <button
