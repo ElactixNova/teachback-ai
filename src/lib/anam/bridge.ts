@@ -5,6 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
+import { lineAnnouncesReport } from "./report-intent";
 import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote, planOffer, boardAnswerNote } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
@@ -163,6 +164,13 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       const ctx = getContext();
       let stopWatch = () => {};
       let planAhead: (justSaid: string) => void = () => {};
+      // When she says she is opening the report, it opens (her LLM does not always call the tool, T45). One marking is shared with the tool.
+      let reportAt = 0;
+      const openReportIfAnnounced = (text: string, final: boolean) => {
+        if (Date.now() - reportAt < 20_000 || !lineAnnouncesReport(text, final)) return;
+        reportAt = Date.now();
+        void actions.checkExplanation();
+      };
       // Sam's questions reach the board even when the LLM never calls write_on_board (T27): the writer
       // hears every line, writes the maths questions she did not write, and knows her last question.
       const questions = createQuestionWriter((note) => actions.writeOnBoard(note), {
@@ -176,6 +184,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
             handlers.onTranscript(speaker, text, id);
             if (speaker === "avatar") {
               questions.heard(id ?? text, text, true);
+              openReportIfAnnounced(text, true);
               // Sam replies about a second after the student stops, too soon for marking or a tool call.
               // So right after each thing she says she gets her next question, ready before she needs it.
               planAhead(text);
@@ -183,7 +192,10 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
           },
           onTranscriptPartial: (id, speaker, soFar) => {
             handlers.onTranscriptPartial?.(id, speaker, soFar);
-            if (speaker === "avatar" && soFar) questions.heard(id, soFar, false);
+            if (speaker === "avatar" && soFar) {
+              questions.heard(id, soFar, false);
+              openReportIfAnnounced(soFar, false);
+            }
           },
         },
         context: {
