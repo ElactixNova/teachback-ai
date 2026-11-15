@@ -1,0 +1,22 @@
+// T52: the mark scheme titles shown on screen never contain the formula or answer. Prints every title.
+import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { chromium } from "playwright-core";
+const require = createRequire(import.meta.url);
+const { chromiumPath } = require("./chromium-path.cjs");
+const here = path.dirname(fileURLToPath(import.meta.url));
+const pdf = process.argv[2] || "Quadratic_Equations_GCSE_AQA_Notes.pdf";
+const browser = await chromium.launch({ executablePath: chromiumPath(), headless: true });
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const marks = [];
+page.on("response", async (r) => { if (r.url().includes("/api/mark-scheme")) marks.push(await r.json().catch(() => null)); });
+await page.goto(process.env.BASE_URL || "http://localhost:3000", { waitUntil: "networkidle" });
+await page.locator('input[type="file"]').setInputFiles(path.resolve(here, "../../fixtures", pdf));
+await page.getByLabel("Marks awarded").first().waitFor({ timeout: 90000 });
+const scheme = marks.find(Boolean);
+await browser.close();
+const bad = scheme.criteria.filter((c) => /[=±√^$]|\\/.test(c.title));
+for (const c of scheme.criteria) console.log(`- ${c.title}`);
+console.log(bad.length ? `FAIL: formula-like titles: ${bad.map((c) => c.title).join(" | ")}` : "PASS: no formula in any title");
+process.exit(bad.length ? 1 : 0);

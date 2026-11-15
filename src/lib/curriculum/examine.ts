@@ -116,6 +116,7 @@ const SchemeSchema = z.object({
 const SCHEME_PROMPT = `You are an examiner writing a mark scheme from a student's lecture notes, for the topic they will teach back.
 The notes contain page markers like [Page 2]. Use only what the notes say.
 Rules:
+- title: a neutral label for WHAT is tested, never the answer to it. The title is shown to the student all session, so it must not contain the formula, equation, definition, rule or value they are meant to produce: write "The quadratic formula", not "x = (-b ± ...)"; write "Area of a triangle", not "A = ½bh". Put the actual answer only in \`expected\`.
 - Any criterion about a worked example or calculation must include one expected step that checks the RESULT: \"Reaches the correct final value with the right units\" (name the value or how it is found), not only that the method is described, so a wrong answer loses a mark.
 - topic: a short descriptive title of what these notes actually teach (2 to 6 words, for example "Photosynthesis" or "Solving quadratic equations"), written from the content. Never use the file name or a lecture code.
 - Write 4 to 7 criteria for the topic. Each criterion is one idea a student must explain, with a short title.
