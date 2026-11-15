@@ -253,16 +253,12 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
   };
 
   return (
-    <section aria-label="Gap notes" className="sheet @container flex h-full min-h-0 flex-col overflow-hidden">
-      {/* Figma Report header (84:811): mark + titles, gap progress, actions. */}
+    <section aria-label="Review" className="sheet @container flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Figma Report header (84:811), without the brand mark: title + topic, gap progress, actions. */}
       <header className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-ink/8 bg-card/72 px-4 py-3.5 backdrop-blur-md sm:px-8">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element -- static brand SVG */}
-          <img src="/brand-mark.svg" alt="" width={30} height={30} className="h-[30px] w-[30px] shrink-0" />
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold leading-[22px] tracking-[-0.01em] text-ink">{report ? "Knowledge Gap Report" : "Gap notes"}</h2>
-            {scheme?.topic && <p className="truncate text-sm leading-5 text-faint">{scheme.topic}</p>}
-          </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-base font-semibold leading-[22px] tracking-[-0.01em] text-ink">Review</h2>
+          {scheme?.topic && <p className="truncate text-sm leading-5 text-faint">{scheme.topic}</p>}
         </div>
         {gaps.length > 0 && (
           <nav aria-label="Gaps" className="order-last flex w-full items-center justify-center gap-1.5 @4xl:order-none @4xl:w-auto">
