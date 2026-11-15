@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Eraser, LoaderCircle, Maximize, Minus, Move, Pen, Plus, ScanSearch, Trash2, Undo2 } from "lucide-react";
+import { Eraser, LoaderCircle, Maximize, Minus, Move, Pen, Plus, ScanSearch, SkipForward, Trash2, Undo2 } from "lucide-react";
 import type { WhiteboardSnapshot } from "@/types/session";
 import {
   HAND,
@@ -207,6 +207,8 @@ function inkBounds(strokes: Stroke[], notes: Rect[] = []): { x0: number; y0: num
 interface Props {
   onSnapAndCheck: () => void;
   checking: boolean;
+  /** "Skip this point" above Check my progress: parks the point Sam is asking about. Null hides it. */
+  skip?: { title: string; onSkip: () => void } | null;
   /** Called whenever the board goes from empty to non-empty or back. */
   onEmptyChange?: (empty: boolean) => void;
   /** Called after every committed change (stroke, undo, clear) with a counter, so callers can re-mark. Not on pan/zoom. */
@@ -214,7 +216,7 @@ interface Props {
 }
 
 export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function WhiteboardCanvas(
-  { onSnapAndCheck, checking, onEmptyChange, onChange },
+  { onSnapAndCheck, checking, skip, onEmptyChange, onChange },
   ref,
 ) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -922,18 +924,35 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
               <Maximize className="h-3.5 w-3.5" /> Fit
             </button>
           </div>
-          <button
-            type="button"
-            onClick={onSnapAndCheck}
-            disabled={checking}
-            className="action pointer-events-auto inline-flex min-h-12 items-center gap-3 rounded-full bg-accent px-5 py-1.5 text-left text-white transition hover:bg-accent-strong disabled:cursor-wait disabled:opacity-80"
-          >
-            {checking ? <LoaderCircle className="h-5 w-5 shrink-0 animate-spin" /> : <ScanSearch className="h-5 w-5 shrink-0" />}
-            <span className="leading-tight">
-              <span className="block whitespace-nowrap text-base font-semibold">{checking ? "Checking…" : "Check my progress"}</span>
-              <span className="block whitespace-nowrap text-xs text-white/80">{checking ? "Comparing with your mark scheme" : "Marks so far, then keep teaching"}</span>
-            </span>
-          </button>
+          <div className="flex min-w-0 flex-col items-end gap-2">
+            {skip && (
+              <button
+                type="button"
+                onClick={skip.onSkip}
+                disabled={checking}
+                title={`Skip "${plainMath(skip.title)}": Sam stops asking about it and it goes in your report`}
+                className="pointer-events-auto inline-flex min-h-11 max-w-[min(320px,60vw)] items-center gap-2 rounded-full border border-line bg-card/95 px-4 py-1.5 text-left shadow-[var(--shadow-1)] transition hover:bg-canvas disabled:opacity-60"
+              >
+                <SkipForward className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+                <span className="min-w-0 leading-tight">
+                  <span className="block text-sm font-semibold">Skip this point</span>
+                  <span className="block truncate text-xs text-muted">{plainMath(skip.title)}</span>
+                </span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onSnapAndCheck}
+              disabled={checking}
+              className="action pointer-events-auto inline-flex min-h-12 items-center gap-3 rounded-full bg-accent px-5 py-1.5 text-left text-white transition hover:bg-accent-strong disabled:cursor-wait disabled:opacity-80"
+            >
+              {checking ? <LoaderCircle className="h-5 w-5 shrink-0 animate-spin" /> : <ScanSearch className="h-5 w-5 shrink-0" />}
+              <span className="leading-tight">
+                <span className="block whitespace-nowrap text-base font-semibold">{checking ? "Checking…" : "Check my progress"}</span>
+                <span className="block whitespace-nowrap text-xs text-white/80">{checking ? "Comparing with your mark scheme" : "Marks so far, then keep teaching"}</span>
+              </span>
+            </button>
+          </div>
         </div>
 
         {clearedToast && (
