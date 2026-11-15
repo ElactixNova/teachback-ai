@@ -509,7 +509,7 @@ export function Workspace() {
           <img src="/brand-mark.svg" alt="" width={30} height={30} className="h-[30px] w-[30px] shrink-0" />
           <p className="text-xl font-semibold tracking-[-0.015em]">Feynman AI</p>
           <span className="hidden h-5 w-px bg-line sm:block" aria-hidden />
-          <p className="hidden text-base font-medium text-muted sm:block">Learn it by teaching it</p>
+          <p className="hidden text-base font-medium text-muted sm:block">Don’t just learn it. Teach it.</p>
         </div>
 
         <div className="ml-auto flex min-w-0 items-center gap-4">

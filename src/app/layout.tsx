@@ -8,7 +8,7 @@ const caveat = Caveat({ variable: "--font-caveat", subsets: ["latin"], weight: [
 
 export const metadata: Metadata = {
   title: "Feynman AI",
-  description: "Learn it by teaching it: explain a topic to an AI student and see it marked against your mark scheme.",
+  description: "Don't just learn it. Teach it. Explain a topic to an AI student and see it marked against your mark scheme.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
