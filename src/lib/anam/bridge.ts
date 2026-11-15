@@ -34,6 +34,25 @@ export function summariseFinal(scheme: MarkScheme | null, r: GapReport): string 
     .join(" ");
 }
 
+/** The longest the avatar waits for a fresh marking before going on with the results it has. */
+const FRESH_WAIT_MS = 8000;
+
+/**
+ * Brings the rail up to date before the avatar relies on it (T30). Live marking trails the student by
+ * up to ~20 s, so a step they have just made still looked missing and Sam asked for it again.
+ * Never waits longer than FRESH_WAIT_MS and never fails: the current results are the fallback.
+ */
+const freshen = (actions: WorkspaceActions): Promise<void> =>
+  Promise.race([actions.refreshRail().catch(() => {}), new Promise<void>((done) => setTimeout(done, FRESH_WAIT_MS))]);
+
+/** A tool handler that reads the rail only after it has been brought up to date. */
+const afterRefresh = (actions: WorkspaceActions, handler: { onStart: () => Promise<string> }) => ({
+  onStart: async () => {
+    await freshen(actions);
+    return handler.onStart();
+  },
+});
+
 /** A check that finished this recently is reused instead of marking again. */
 const RECENT_CHECK_MS = 20_000;
 
@@ -60,13 +79,13 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
       // The writer decides what goes on the board: her last question when the student asked to see it.
       onStart: async (p) => questions.tool({ content: arg(p, "content"), kind: arg(p, "kind") === "text" ? "text" : "math", label: arg(p, "label") || undefined }),
     }),
-    client.registerToolCallHandler(TOOL.getRailStatus, {
+    client.registerToolCallHandler(TOOL.getRailStatus, afterRefresh(actions, {
       onStart: async () => {
         const { markScheme, results, focusIds } = actions.getRail();
         if (!markScheme) return "There is no mark scheme yet. Ask the student what they want to teach you.";
         return railStatusText(markScheme, results, focusIds);
       },
-    }),
+    })),
     client.registerToolCallHandler(TOOL.parkCriterion, {
       onStart: async (p) => {
         const { markScheme } = actions.getRail();
@@ -174,6 +193,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         },
       });
       stopWatch = watchRail(actions, session.addContext);
+      let boardTurn = 0;
 
       return {
         disconnect: () => {
@@ -185,12 +205,20 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
           questions.studentSaid(text);
           session.sendText?.(text);
         },
-        notifyBoard: (state) =>
-          session.addContext(
-            state === "writing"
-              ? `${PRIVATE_NOTE} Board status: the student is writing or drawing now.`
-              : `${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.`,
-          ),
+        notifyBoard: (state) => {
+          const turn = ++boardTurn;
+          if (state === "writing") {
+            session.addContext(`${PRIVATE_NOTE} Board status: the student is writing or drawing now.`);
+            return;
+          }
+          // They stopped: read the board first, so Sam hears what is written, not only that something was.
+          void freshen(actions).then(() => {
+            if (turn !== boardTurn) return; // they picked the pen up again meanwhile
+            const { markScheme, results } = actions.getRail();
+            const seen = markScheme ? boardNote(markScheme, results) : "";
+            session.addContext(`${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.${seen ? ` ${seen}` : ""}`);
+          });
+        },
         setFocus: (criteria) => {
           if (!criteria.length) {
             session.addContext(`${PRIVATE_NOTE} The student wants to continue with the whole topic again.`);
