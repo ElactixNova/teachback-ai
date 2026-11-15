@@ -318,32 +318,38 @@ export function askLine(c: { title: string; probe?: string; ask?: "say" | "write
  * The private note Sam gets right after she asks a question: what is off limits, and the single new
  * question that may follow. Facts and one instruction, short enough to be followed.
  */
-export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], allowNew = true): string {
+/** What the next allowed question is: a follow-up on the point being explained (once per point), else a new point. */
+export function planOffer(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], followed: Iterable<string> = []): { kind: "follow" | "new" | "none"; id: string | null } {
+  const plan = planNext(scheme, results, transcript, told);
+  const done = new Set(followed);
+  if (plan.followUp && !done.has(plan.followUp.id)) return { kind: "follow", id: plan.followUp.id };
+  if (plan.next) return { kind: "new", id: plan.next.id };
+  return { kind: "none", id: null };
+}
+
+export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], allowNew = true, followed: Iterable<string> = []): string {
   const plan = planNext(scheme, results, transcript, told);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   const cur = scheme.criteria.find((c) => c.id === plan.current);
-  // Pace (T37): what is rate-limited is NEW mark-scheme points (`allowNew`, decided by the bridge), never the hook.
-  // Every turn ends with one: a short curious question about the very thing they just said or drew, or an invitation
-  // to carry on. A closed statement hands the turn to the student, who then has to say "yes" and "what now?".
+  const offer = planOffer(scheme, results, transcript, told, followed);
+  // Pace (T37/T38): what is rate-limited is the question, by turn count (`allowNew`, decided by the bridge). The turns
+  // in between end with a plain invitation, so the student is never left with a flat statement, and never quizzed.
   const react = !allowNew;
   return [
     PRIVATE_NOTE,
     react
-      ? "PACE: this turn is a follow-on, not a new point. Reflect ONE thing they just said or drew in under twelve words, in fresh wording, then END WITH A HOOK about that same thing, in 8 words or fewer: usually a plain invitation to carry on (\"Go on, I'm following\", \"And then?\", \"Mm, keep going\"), or, only about something they just drew or wrote, one small specific question (\"Is that dashed line the height?\"). The hook is never a new topic, a different example or a new problem: that is not your turn yet. Never end on a flat statement, never recite their whole answer, never judge it. If they only said yes, okay, done or what now, they are waiting for YOU: ask your next question instead. If they asked or offered something (\"do you want me to draw it?\"), answer it at once and out loud (\"Yes please, draw it for me\") and never leave it hanging."
-      : "PACE: react in a few fresh words, then ask ONE new question (given below). If they only said yes, okay, done or what now, they are waiting for you: go straight to that question. If they said what they will cover next or invited you to choose, follow their lead. If they asked or offered something, answer it first.",
+      ? "PACE: NO question this turn. Say a few fresh words about ONE thing they just said (never \"Okay, so you said\", never repeat their answer back, never judge it), then end with one of these invitations, word for word or very close: \"Go on, I'm following.\" / \"Mm, and then?\" / \"Okay, keep going.\" / \"Take your time, I'm listening.\" The only exception: one small question about something they just DREW or WROTE (\"Is that dashed line the height?\"). If they only said yes, okay, done or what now, they are waiting for you: that is your cue to ask your next question. If they asked or offered something (\"do you want me to draw it?\"), answer it at once and out loud (\"Yes please, draw it for me\") and never leave it hanging."
+      : "PACE: react in a few fresh words, then ask the ONE question given below, and nothing else. If they said what they will cover next or invited you to choose, follow their lead. If they asked or offered something, answer it first.",
     plan.asked.length ? `Already asked, never ask about these again in any wording: ${plan.asked.map(title).join("; ")}.` : "",
     cur && (cur.ask === "write" || cur.ask === "draw")
-      ? "Your current question is a board task: when they say they are done, call capture_whiteboard before you say anything, then mention one specific thing you can see in what they wrote."
-      : "",
-    !react && plan.followUp
-      ? `If their answer leaves it out, you may ask ONE follow-up on "${title(plan.followUp.id)}" about this, without stating it: "${plan.followUp.missing}".`
-      : cur
-      ? `Do not ask a second question about "${cur.title}".`
+      ? "Your current question is a board task: when they say they are done, call capture_whiteboard before you say anything, then say one specific thing you can see in what they wrote and ask ONE short question about it."
       : "",
     react
       ? ""
-      : plan.next
-      ? `Your next new question, once they have answered: ${askLine(plan.next)}. Ask only that, unless they have already explained it in their own words earlier: then ask about one specific detail of what they said instead.`
+      : offer.kind === "follow" && plan.followUp
+      ? `Your question this turn is ONE follow-up on "${title(plan.followUp.id)}", leading them to this without stating it: "${plan.followUp.missing}". Only if their last answer left it out; otherwise just invite them to carry on. Do not start a new point this turn.`
+      : offer.kind === "new" && plan.next
+      ? `Your question this turn: ${askLine(plan.next)}. Ask only that, unless they have already explained it in their own words: then ask about one specific detail of what they said instead.`
       : "Every point has now been asked. After their answer, call get_rail_status: it lists any point to go back over once.",
     plan.left > 0 ? `${plan.left} point${plan.left === 1 ? " has" : "s have"} not been asked yet, so do not offer or mention their results.` : "",
   ]

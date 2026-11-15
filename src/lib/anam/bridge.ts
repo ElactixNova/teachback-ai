@@ -5,7 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
-import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote, planNext } from "@/lib/rail/state";
+import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote, planOffer } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
 import { spokenToLatex } from "@/lib/math/spoken";
@@ -118,7 +118,7 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
         const { markScheme, results } = actions.getRail();
         const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
         return seen
-          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply, using only what is written above and adding no detail of your own. Then end with ONE short, specific question about what they drew or wrote (whether a part is what you think it is, or why it is there), or ask what they will do next: never stop on a statement.`
+          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply, using only what is written above and adding no detail of your own. Then end with ONE short, specific question about what they drew or wrote (whether a part is what you think it is, or why it is there), or ask what they will do next: never stop on a statement. That one question is your whole turn: do not start a new point or ask anything else.`
           : "They have drawn on the whiteboard but you cannot make out what it says. Do NOT describe or guess any content. Say honestly that you cannot quite read it and ask what they wrote.";
       },
     }),
@@ -203,7 +203,8 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       stopWatch = watchRail(actions, session.addContext);
       let boardTurn = 0;
       const told = new Set<string>();
-      let pendingNext: string | null = null;
+      let pending: { kind: "follow" | "new" | "none"; id: string | null } = { kind: "none", id: null };
+      const followed = new Set<string>();
       // New points are paced by turns, not by question marks: hooks ("Is that the height?") contain one too.
       let lastAllowedNew = true;
       let sinceNew = 0;
@@ -213,15 +214,16 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
         // The line she just said may not be in the workspace's transcript yet (it arrives a render later).
         const lines = transcript.some((l) => l.speaker === "avatar" && l.text === justSaid) ? transcript : [...transcript, { speaker: "avatar" as const, text: justSaid, t: "" }];
         // The point the last note told her to ask, if she asked something this turn, counts as asked however she worded it.
-        if (lastAllowedNew && pendingNext && /\?/.test(justSaid)) {
-          told.add(pendingNext);
+        if (lastAllowedNew && pending.id && /\?/.test(justSaid)) {
+          // The one question the last note allowed (a follow-up or a new point) is used up, whatever its wording.
+          (pending.kind === "follow" ? followed : told).add(pending.id);
           sinceNew = 0;
         } else {
           sinceNew++;
         }
-        pendingNext = planNext(markScheme, results, lines, told).next?.id ?? null;
-        lastAllowedNew = sinceNew >= 1; // a new point at most every second turn; every turn in between ends with a hook
-        const note = planNote(markScheme, results, lines, told, lastAllowedNew);
+        lastAllowedNew = sinceNew >= 2; // a question at most every third turn; the two turns between end with an invitation
+        pending = lastAllowedNew ? planOffer(markScheme, results, lines, told, followed) : { kind: "none", id: null };
+        const note = planNote(markScheme, results, lines, told, lastAllowedNew, followed);
         // Always sent, even when identical to the last one: the pacing instruction has to arrive before every reply.
         session.addContext(note);
       };
@@ -247,7 +249,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
             if (turn !== boardTurn) return; // they picked the pen up again meanwhile
             const { markScheme, results } = actions.getRail();
             const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
-            session.addContext(`${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.${seen ? ` ${seen} Say one specific thing about it using only those words, then ask ONE short question about it or about what comes next: never leave it as a statement.` : ""}`);
+            session.addContext(`${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.${seen ? ` ${seen} Say one specific thing about it using only those words, then ask ONE short question about it or about what comes next: never leave it as a statement. That one question is your whole turn: do not start a new point or ask anything else.` : ""}`);
           });
         },
         setFocus: (criteria) => {
