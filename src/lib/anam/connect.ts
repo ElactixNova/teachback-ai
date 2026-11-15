@@ -1,5 +1,6 @@
 // Shared Anam session plumbing (T2/T11): session token, video stream, transcript + cues, lifecycle.
 // The legacy bridge (./bridge.ts) and the rail bridge (./rail-bridge.ts) differ only in their tools.
+import { diag } from "./diag";
 import type { AnamClient, MessageStreamEvent } from "@anam-ai/js-sdk";
 import type { AnamSessionResponse, ApiError } from "@/types/session";
 import type { AvatarHandlers, AvatarSession, Speaker } from "@/components/workspace/types";
@@ -29,6 +30,7 @@ function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>,
   const buffers = new Map<string, { speaker: Speaker; text: string; shown: boolean }>();
   return (e: MessageStreamEvent) => {
     const speaker: Speaker = String(e.role) === "user" ? "student" : "avatar";
+    diag(speaker === "avatar" ? "sam" : "you", `${e.content ?? ""}${e.interrupted ? " [INTERRUPTED]" : ""}${e.endOfSpeech ? " [END]" : ""}`);
     const cue = toUiCue(e.cueTag);
     if (cue) handlers.onCue(cue);
 
@@ -151,6 +153,7 @@ export async function connectAnam(opts: {
   };
 
   const addContext = (text: string) => {
+    diag("note", text);
     if (!client?.isStreaming()) return;
     try {
       client.addContext(text);

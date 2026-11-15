@@ -15,6 +15,8 @@ export interface TranscriptExport {
   /** The latest mark, when the session has one. `final: false` = from a mid-session "Check my progress". */
   mark?: { awarded: number; total: number; final?: boolean };
   lines: ExportLine[];
+  /** Raw avatar stream and private notes (see lib/anam/diag), appended after the transcript for debugging. */
+  debug?: string[];
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -36,7 +38,7 @@ export function transcriptFileName(topic: string | undefined, date: Date): strin
 }
 
 /** Header, a blank line, then one line per turn: "[mm:ss] Sam: ..." / "[mm:ss] You: ...". System lines are left out. */
-export function formatTranscript({ topic, date, mark, lines }: TranscriptExport): string {
+export function formatTranscript({ topic, date, mark, lines, debug }: TranscriptExport): string {
   const head = ["Feynman AI session transcript", `Topic: ${topic?.trim() || "(none)"}`, `Date: ${ymd(date)} ${hm(date)}`];
   if (mark) {
     const pct = mark.total ? ` (${Math.round((mark.awarded / mark.total) * 100)}%)` : "";
@@ -47,7 +49,8 @@ export function formatTranscript({ topic, date, mark, lines }: TranscriptExport)
     .map((l) => ({ ...l, text: l.text.replace(/\s+/g, " ").trim() }))
     .filter((l) => l.text)
     .map((l) => `[${l.t}] ${l.speaker === "student" ? "You" : "Sam"}: ${l.text}`);
-  return [...head, "", ...(turns.length ? turns : ["(no lines yet)"]), ""].join("\n");
+  const raw = debug?.length ? ["", "--- Debug: raw avatar stream and private notes (time since the session began) ---", ...debug, ""] : [];
+  return [...head, "", ...(turns.length ? turns : ["(no lines yet)"]), "", ...raw].join("\n");
 }
 
 /** Browser only: save `text` as a UTF-8 .txt file. */

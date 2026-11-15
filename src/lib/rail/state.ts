@@ -329,7 +329,7 @@ export function planNote(scheme: MarkScheme, results: CriterionResult[], transcr
   return [
     PRIVATE_NOTE,
     react
-      ? "PACE: your next reply must have NO question mark. Reflect ONE thing they just said in under twelve words, in fresh wording (not \"Okay, so you said\"), the way a classmate would, and stop. Do not recite their whole answer. If something confuses you, say which part instead."
+      ? "PACE: unless they ask or offer you something (then see next), your next reply must have NO question mark. Reflect ONE thing they just said in under twelve words, in fresh wording (not \"Okay, so you said\"), the way a classmate would, and stop. Do not recite their whole answer. If something confuses you, say which part instead. BUT if they just asked you something or offered to do something (\"do you want me to draw it?\", \"shall I explain?\", \"is that what you meant?\"), answer it at once and out loud, and accept the offer in your own words (\"Yes please, draw it for me\", \"Yes, go ahead\"): that always overrides the no-question rule, and you never leave an offer hanging in silence."
       : "PACE: your next reply may include ONE question, after a short reaction in fresh wording. If they said what they will cover next, or invited you to choose, follow their lead.",
     plan.asked.length ? `Already asked, never ask about these again in any wording: ${plan.asked.map(title).join("; ")}.` : "",
     cur && (cur.ask === "write" || cur.ask === "draw")

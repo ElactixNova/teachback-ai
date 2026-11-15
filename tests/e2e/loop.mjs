@@ -37,6 +37,7 @@ async function ask(system, user, max = 2500) {
 const STYLES = {
   explainer: "You explain freely: 2 to 4 sentences, covering a whole idea, with an example, in natural spoken English.",
   terse: "You are a lazy, terse student: answer in 3 to 8 words, often a fragment (\"the 2\", \"you factorise it\"), never elaborating unless pushed.",
+  offers: "Every second message, instead of explaining, ask Sam whether she wants you to demonstrate something, e.g. \"Do you want me to draw that?\" or \"Shall I show you an example?\". When Sam says yes or asks you to, reply BOARD (for a drawing) or give the example in 2 sentences.",
   mixed: "Mix it up: usually 1 to 3 sentences, sometimes a fragment, once or twice go off on a tangent you find interesting, and once make a small mistake.",
 };
 
