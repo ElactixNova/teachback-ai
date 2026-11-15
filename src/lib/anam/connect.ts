@@ -26,7 +26,7 @@ const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
  * Turn streamed message chunks into whole transcript lines, and surface cues as they arrive.
  * `typed` holds lines sent with sendText: the workspace already shows them, so their echo is skipped.
  */
-function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>, onPersonaSpeech?: (chars: number, done: boolean) => void) {
+function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>, onPersonaSpeech?: (chars: number, done: boolean) => void, onSpeaking?: (speaking: boolean) => void) {
   const buffers = new Map<string, { speaker: Speaker; text: string; shown: boolean }>();
   return (e: MessageStreamEvent) => {
     const speaker: Speaker = String(e.role) === "user" ? "student" : "avatar";
@@ -35,7 +35,10 @@ function createTranscriptCollector(handlers: AvatarHandlers, typed: Set<string>,
     if (cue) handlers.onCue(cue);
 
     // Sam's words as they stream: the pen writing a question on the board keeps pace with them.
-    if (speaker === "avatar") onPersonaSpeech?.((e.content ?? "").length, !!(e.endOfSpeech || e.interrupted));
+    if (speaker === "avatar") {
+      onPersonaSpeech?.((e.content ?? "").length, !!(e.endOfSpeech || e.interrupted));
+      onSpeaking?.(!(e.endOfSpeech || e.interrupted));
+    }
 
     const buf = buffers.get(e.id) ?? { speaker, text: "", shown: false };
     buf.text += e.content ?? "";
@@ -97,6 +100,33 @@ export async function connectAnam(opts: {
   const onPageHide = () => void client?.stopStreaming().catch(() => {});
   window.addEventListener("pagehide", onPageHide);
 
+  // Private notes are never pushed into the avatar's pipeline while Sam is mid-sentence (T35): a context
+  // update during speech may disturb the voice. They wait and arrive, in order, right after she stops, which is
+  // still before her next reply. A safety timer flushes them if the end-of-speech event never comes.
+  let speaking = false;
+  let speakingTimer: ReturnType<typeof setTimeout> | null = null;
+  const waiting: string[] = [];
+  const push = (text: string) => {
+    if (!client?.isStreaming()) return;
+    try {
+      client.addContext(text);
+    } catch (e) {
+      console.warn("[anam] addContext failed", e);
+    }
+  };
+  const flush = () => {
+    if (speakingTimer) clearTimeout(speakingTimer);
+    speakingTimer = null;
+    speaking = false;
+    for (const note of waiting.splice(0)) push(note);
+  };
+  const setSpeaking = (now: boolean) => {
+    if (!now) return flush();
+    speaking = true;
+    if (speakingTimer) clearTimeout(speakingTimer);
+    speakingTimer = setTimeout(flush, 15_000);
+  };
+
   const disconnect = () => {
     closedByUs = true;
     window.removeEventListener("pagehide", onPageHide);
@@ -114,7 +144,7 @@ export async function connectAnam(opts: {
     client = c;
 
     // Register listeners and tool handlers before streaming so nothing is missed.
-    c.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, createTranscriptCollector(handlers, typed, opts.onPersonaSpeech));
+    c.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, createTranscriptCollector(handlers, typed, opts.onPersonaSpeech, setSpeaking));
     c.addListener(AnamEvent.DIRECTOR_NOTE_CUE_APPLIED, (ev) => {
       const cue = toUiCue(ev.cueTag);
       if (cue) handlers.onCue(cue);
@@ -154,12 +184,9 @@ export async function connectAnam(opts: {
 
   const addContext = (text: string) => {
     diag("note", text);
-    if (!client?.isStreaming()) return;
-    try {
-      client.addContext(text);
-    } catch (e) {
-      console.warn("[anam] addContext failed", e);
-    }
+    if (!speaking) return push(text);
+    waiting.push(text);
+    if (waiting.length > 4) waiting.shift();
   };
 
   return { disconnect, sendText, addContext };
