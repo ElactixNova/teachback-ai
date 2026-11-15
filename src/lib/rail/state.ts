@@ -201,8 +201,25 @@ export function boardNote(scheme: MarkScheme, results: CriterionResult[]): strin
   return `On their whiteboard (you can see it through the examiner, so never ask them to say aloud what is already written or drawn there): ${seen.slice(0, MAX_BOARD_CHARS)}.${unfinished}`;
 }
 
+/** Sam's most recent questions (sentences ending in "?") and what the student said since, so she never repeats herself. */
+export function askedNote(transcript: TimedLine[] = []): string {
+  const asked: string[] = [];
+  for (const l of transcript.filter((x) => x.speaker !== "student").slice(-8)) {
+    for (const s of l.text.match(/[^.?!]*\?/g) ?? []) if (s.trim().length > 8) asked.push(s.trim());
+  }
+  const lastSam = transcript.map((l) => l.speaker).lastIndexOf("avatar");
+  const answered = transcript.slice(lastSam + 1).filter((l) => l.speaker === "student").map((l) => l.text.trim()).join(" ");
+  if (!asked.length) return "";
+  return [
+    `Questions you already asked (never ask these again, in any wording): ${asked.slice(-5).map((q) => `"${q.slice(0, 140)}"`).join("; ")}.`,
+    answered ? `Since your last turn they said: "${answered.slice(0, 300)}". Treat that as their answer to your last question: react to it, do not ask it again.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 /** What the avatar gets back from get_rail_status: short, factual, no answers. */
-export function railStatusText(scheme: MarkScheme, results: CriterionResult[], focusIds: string[] = []): string {
+export function railStatusText(scheme: MarkScheme, results: CriterionResult[], focusIds: string[] = [], transcript: TimedLine[] = []): string {
   const { awarded, total } = railScore(scheme, results);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   const pick = (s: CriterionStatus[]) => results.filter((r) => s.includes(r.status)).map((r) => title(r.criterionId));
@@ -230,6 +247,7 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
     : "";
   return [
     `Rail: ${awarded}/${total} marks so far.`,
+    askedNote(transcript),
     board,
     `Fully explained: ${list(pick(["full"]))}.`,
     `Partly explained: ${list(pick(["partial", "missed"]))}.`,

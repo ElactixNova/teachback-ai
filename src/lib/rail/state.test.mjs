@@ -222,3 +222,16 @@ test("rail status always names a next question while a point is open", () => {
   assert.match(railStatusText(scheme, [r("c1", "full", 3), r("c2", "full", 2)]), /Everything has been addressed/);
   assert.doesNotMatch(text, /unsure|not sure/i);
 });
+
+test("askedNote lists Sam's recent questions and the answer since", async () => {
+  const { askedNote } = await import("./state.ts");
+  const t = [
+    { t: "0:01", speaker: "avatar", text: "Okay. Can you write down the quadratic formula?" },
+    { t: "0:09", speaker: "student", text: "x equals minus b plus or minus root b squared minus four a c over two a" },
+  ];
+  const n = askedNote(t);
+  assert.match(n, /never ask these again/);
+  assert.match(n, /quadratic formula/);
+  assert.match(n, /Since your last turn they said/);
+  assert.equal(askedNote([]), "");
+});
