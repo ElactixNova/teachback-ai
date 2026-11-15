@@ -103,7 +103,7 @@ export function mergeLive(scheme: MarkScheme, state: RailState, incoming: Criter
     const better = next.awarded > prev.awarded || (next.awarded === prev.awarded && prev.status === "not_covered" && next.status !== "not_covered");
     const base: CriterionResult = better
       ? { ...next, awarded: Math.min(next.awarded, c.marks), said: next.said ?? prev.said }
-      : { ...prev, boardObservation: next.boardObservation ?? prev.boardObservation, boardUnfinished: next.boardUnfinished ?? prev.boardUnfinished, said: next.said ?? prev.said };
+      : { ...prev, boardObservation: next.boardObservation ?? prev.boardObservation, boardUnfinished: next.boardUnfinished ?? prev.boardUnfinished, fix: next.fix ?? prev.fix, said: next.said ?? prev.said };
     // Live "in_progress" is not a stored status: it is reported through activeId.
     if (base.status === "in_progress") base.status = base.awarded > 0 ? "partial" : prev.status === "not_covered" ? "not_covered" : prev.status;
 
@@ -134,8 +134,32 @@ export function findCriterion(scheme: MarkScheme, ref: string): MarkScheme["crit
 }
 
 export function railScore(scheme: MarkScheme, results: CriterionResult[]): { awarded: number; total: number } {
-  return { awarded: results.reduce((n, r) => n + r.awarded, 0), total: scheme.totalMarks };
+  return { awarded: fitResults(scheme, results).reduce((n, r) => n + r.awarded, 0), total: scheme.totalMarks };
 }
+
+/**
+ * Results that fit the scheme as it is now (after an edit): one per criterion in scheme order, marks capped at
+ * the criterion's marks, missing steps limited to its current steps. Editing a 3-mark point down to 1 step used
+ * to keep 3 marks (3 / 2 shown, 150%).
+ */
+export function fitResults(scheme: MarkScheme, results: CriterionResult[]): CriterionResult[] {
+  const blank = emptyResults(scheme);
+  return scheme.criteria.map((c, i) => {
+    const r = results.find((x) => x.criterionId === c.id);
+    if (!r) return blank[i];
+    const awarded = Math.max(0, Math.min(c.marks, r.awarded));
+    const kept = r.missingSteps.filter((s) => c.expected.includes(s));
+    const missingSteps = awarded >= c.marks ? [] : kept.length === c.marks - awarded ? kept : c.expected.slice(awarded);
+    const status: CriterionStatus = awarded >= c.marks && r.status !== "not_covered" ? "full" : r.status === "full" ? "partial" : r.status;
+    return awarded === r.awarded && missingSteps.length === r.missingSteps.length && status === r.status ? r : { ...r, awarded, missingSteps, status };
+  });
+}
+
+/** "mm:ss" (minutes may pass 99) -> seconds, for ordering evidence. NaN when unparseable. */
+const seconds = (t: string | undefined) => {
+  const m = t?.match(/^(\d+):(\d{2})$/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
+};
 
 /**
  * Combine the final report with the live rail: per criterion keep the better mark (the rail never
@@ -143,10 +167,17 @@ export function railScore(scheme: MarkScheme, results: CriterionResult[]): { awa
  * Totals and the primary gap are recomputed to match.
  */
 export function finalizeReport(scheme: MarkScheme, report: GapReport, live: CriterionResult[]): GapReport {
+  const finals = fitResults(scheme, report.results);
+  const lives = fitResults(scheme, live);
   const results = scheme.criteria.map((c) => {
-    const fin = report.results.find((r) => r.criterionId === c.id);
-    const lv = live.find((r) => r.criterionId === c.id);
-    const best = lv && (!fin || lv.awarded > fin.awarded) ? lv : (fin ?? lv)!;
+    const fin = finals.find((r) => r.criterionId === c.id);
+    const lv = lives.find((r) => r.criterionId === c.id);
+    // The live mark wins when higher, EXCEPT when the final marking's evidence comes later than the live one's:
+    // the student said something after the live mark that cost marks (a later contradiction), so keep the
+    // final mark and its fix instead of hiding the mistake behind an early full mark.
+    const contradictedLater =
+      !!fin?.evidence && !!lv?.evidence && fin.status !== "not_covered" && seconds(fin.evidence.timestamp) > seconds(lv.evidence.timestamp);
+    const best = lv && (!fin || (lv.awarded > fin.awarded && !contradictedLater)) ? lv : (fin ?? lv)!;
     const parked = !!lv?.parked && best.awarded < c.marks;
     const status: CriterionStatus =
       best.awarded >= c.marks ? "full" : parked ? "parked" : best.status === "in_progress" ? (best.awarded > 0 ? "partial" : "missed") : best.status;
@@ -342,7 +373,26 @@ export function nextStep(scheme: MarkScheme, results: CriterionResult[], transcr
 /** The sentence after a board read: what the board is, said as their answer, then the next step. Never a guess about a line or label. */
 export function boardAnswerNote(scheme: MarkScheme | null, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], followed: Iterable<string> = []): string {
   const tail = scheme ? ` Then ${nextStep(scheme, results, transcript, told, followed)}` : "";
-  return `If it answers what you asked them to write or draw, say in your own words what it shows, as their answer (for example "Oh, so the area is base times height over two"). Use only the words above: never guess what a line or label is, never ask whether something on the board is what it is, never ask for something already on the board, and never ask them to calculate, draw or write anything new except the question below.${tail}`;
+  // A neutral example (it used to be "base times height over two", the triangle formula, which primed Sam to
+  // accept halving on every topic, e.g. a rectangle).
+  const doubt = scheme && boardLooksWrong(scheme, results, transcript)
+    ? ` The marker's last look at the board found something not right yet in their working. Do NOT say it back as a fact, do not call it right, and never say what the right answer or step is. Instead say, as a curious learner, which part you are unsure about and ask them to check it (for example "Hmm, wait, can you talk me through that last step again?"). That is your question this turn.`
+    : "";
+  return `If it answers what you asked them to write or draw, say in your own words what it shows, as their answer (for example "Oh, so you multiplied those two together"). Use only the words above: never guess what a line or label is, never ask whether something on the board is what it is, never ask for something already on the board, and never ask them to calculate, draw or write anything new except the question below.${doubt}${doubt ? "" : tail}`;
+}
+
+/**
+ * True when the live marker saw the student's board working for the point Sam is on (or the live focus) and
+ * found it wrong: a board observation, marks lost, a fix, and the board not marked unfinished. Never names the
+ * answer: callers only use it to make Sam ask the student to check their working.
+ */
+export function boardLooksWrong(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = []): boolean {
+  const ids = [planNext(scheme, results, transcript).current, liveFocusId(results)].filter((x): x is string => !!x);
+  return ids.some((id) => {
+    const c = scheme.criteria.find((x) => x.id === id);
+    const r = results.find((x) => x.criterionId === id);
+    return !!c && !!r && !!r.boardObservation?.trim() && !!r.fix?.trim() && r.boardUnfinished !== true && r.awarded < c.marks && (r.status === "partial" || r.status === "missed");
+  });
 }
 
 export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], allowNew = true, followed: Iterable<string> = []): string {
