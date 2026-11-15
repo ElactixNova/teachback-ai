@@ -371,3 +371,9 @@ test("T39 pushed rail notes are facts only: they never name a next question or a
   // The on-demand status (get_rail_status) still steers.
   assert.match(railStatusText(scheme, after), /Next question/);
 });
+
+test("T41 pacing: a finished answer is not met with 'keep going'", () => {
+  const note = planNote(scheme, emptyResults(scheme), [], [], false);
+  assert.match(note, /FINISHED with it: never say keep going/);
+  assert.match(note, /Anything to add, or shall I move on/);
+});

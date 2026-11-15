@@ -28,7 +28,7 @@ export function summariseFinal(scheme: MarkScheme | null, r: GapReport): string 
           primary.missingSteps.length ? `; they missed: ${primary.missingSteps.slice(0, 3).join("; ")}` : ""
         }.`
       : "Nothing lost marks.",
-    "Tell them their mark and that one point in two short sentences, warmly, as their student. Do not read this out or add corrections of your own.",
+    "Tell them their mark and that one point in two short sentences, warmly, as their student. Never use a name for them and never say \"Great job\". Do not read this out or add corrections of your own.",
   ]
     .filter(Boolean)
     .join(" ");
