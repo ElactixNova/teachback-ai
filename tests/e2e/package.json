@@ -8,6 +8,7 @@
     "smoke": "node smoke.mjs",
     "board-notes": "node board-notes.mjs",
     "fresh-rail": "node fresh-rail.mjs",
+    "dialogue": "node dialogue.mjs",
     "leak": "node leak.mjs"
   },
   "dependencies": {

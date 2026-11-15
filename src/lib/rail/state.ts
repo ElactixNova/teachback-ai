@@ -4,6 +4,8 @@
 // snapshots into a stable rail: marks never go down during a session, attempts are counted per new
 // student quote that still loses marks, and a criterion is parked after its second failed attempt.
 import type { CriterionResult, CriterionStatus, GapReport, MarkScheme, TimedLine } from "@/types/session";
+import { mathKey } from "../board/questions.ts";
+import { spokenToLatex } from "../math/spoken.ts";
 
 /** A criterion is parked once the student has addressed it this many times and still lost marks. */
 export const MAX_ATTEMPTS = 2;
@@ -202,6 +204,142 @@ export function boardNote(scheme: MarkScheme, results: CriterionResult[]): strin
 }
 
 /** Sam's most recent questions (sentences ending in "?") and what the student said since, so she never repeats herself. */
+// ---- What Sam has asked, and what she asks next (T32) -------------------------------------------
+// Sam answers about a second after the student stops, so she cannot wait for marking or a tool call
+// before every question. Instead the bridge hands her the next question BEFORE she needs it: after
+// each question she asks, a private note names the one new question that may follow. What counts as
+// "already asked" is read from her own lines, so it is instant and does not depend on the examiner.
+
+const FILLER = new Set(
+  "a an and are as at be been both but by can could did do does each either else ever for from get give had has have her here how if in into is it its just let like may me might more most much must my no nor not now of off on once one only or other our out over own please same say see shall she should show so some such tell than that the their them then there these they thing this those to too up us use very was we were what when where which while who why will with would you your about above after again also am any before being below between during further having he him his i im ive me myself than through under until whom yours write draw sketch board label explain look help call something way actually really exactly".split(" "),
+);
+// Numbers and spoken maths are left out: "x squared plus six x minus seven" and "$x^2 + 6x - 7$" share no words.
+const MATHS = new Set("zero one two three four five six seven eight nine ten eleven twelve plus minus times equals equal squared cubed over divided multiplied power root".split(" "));
+
+/** The meaningful words of a question, crudely stemmed (first five letters), without filler, numbers or single letters. */
+function keyWords(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of text.toLowerCase().replace(/\$[^$]*\$/g, " ").match(/[a-z]+/g) ?? []) {
+    if (w.length < 3 || FILLER.has(w) || MATHS.has(w)) continue;
+    out.add(w.slice(0, 5));
+  }
+  return out;
+}
+
+/** The maths in a line, normalised, whether it was spoken ("x squared minus four x") or typeset ($x^2 - 4x$); "" when there is none. */
+function mathsOf(text: string): string {
+  const key = mathKey(spokenToLatex(text) ?? text);
+  return /[\d=^+\-*/×÷√]/.test(key) && !/\s/.test(key) && key.length >= 4 ? key : "";
+}
+
+/** How much two questions are about the same thing: shared key words over the smaller set (0..1). */
+function alike(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared >= 2 || Math.min(a.size, b.size) === 1 ? shared / Math.min(a.size, b.size) : 0;
+}
+
+/**
+ * A probe cut down to the first thing it asks for. Probes like "Could you write the quadratic formula and
+ * tell me when you would use it?" made Sam ask two things in one turn; the second part is a follow-up.
+ */
+export function singleAsk(probe: string): string {
+  const first = probe.match(/^[^?]*\?/)?.[0] ?? probe;
+  const cut = first.replace(/,?\s+and\s+(?:then\s+)?(?:tell|explain|say|find|state|label|describe|give|show|mark|why|what|when|how|where|which)\b[^?]*/i, "");
+  return cut.trim();
+}
+
+/** True when a line of Sam's asks the student for something (a question, or "write/solve/sketch ..."). */
+const asks = (line: string) => /\?|\b(?:write|draw|sketch|solve|show me|tell me|work out|explain)\b/i.test(line);
+
+/**
+ * How many of Sam's turns asked about each criterion, read from her own lines. A question counts for
+ * every criterion whose probe it resembles (probes overlap: "when would you use the formula" belongs to
+ * two points), and a question that resembles none is a follow-up on the point she asked about last.
+ */
+export function askedCounts(scheme: MarkScheme, transcript: TimedLine[] = []): { counts: Record<string, number>; current: string | null } {
+  const probes = scheme.criteria.map((c) => ({ id: c.id, words: keyWords(`${c.probe ?? ""} ${c.title}`), maths: mathsOf(c.probe ?? "") }));
+  const counts: Record<string, number> = {};
+  let current: string | null = null;
+  for (const line of transcript) {
+    if (line.speaker !== "avatar" || !asks(line.text)) continue;
+    const words = keyWords(line.text);
+    const maths = mathsOf(line.text);
+    // The same expression is the same question ("How would you handle x squared minus four x equals zero?" has few words to go on).
+    const sameMaths = (m: string) => !!m && !!maths && (m === maths || m.includes(maths) || maths.includes(m));
+    const scored = probes.map((p) => ({ id: p.id, score: sameMaths(p.maths) ? 1 : alike(words, p.words) })).filter((x) => x.score >= 0.5);
+    if (scored.length === 0) {
+      if (current) counts[current] = (counts[current] ?? 0) + 1;
+      continue;
+    }
+    for (const x of scored) counts[x.id] = (counts[x.id] ?? 0) + 1;
+    current = scored.sort((a, b) => b.score - a.score)[0].id;
+  }
+  return { counts, current };
+}
+
+export interface NextPlan {
+  /** Points Sam has asked about at least once. */
+  asked: string[];
+  /** The point her last question was about. */
+  current: string | null;
+  /** One follow-up she may still ask on the current point (it lost marks and was asked only once). */
+  followUp: { id: string; missing: string } | null;
+  /** The next NEW point: never asked, not already fully explained or parked. Null when every point has been asked. */
+  next: MarkScheme["criteria"][number] | null;
+  /** Points not asked yet (including `next`). */
+  left: number;
+}
+
+/** What Sam may ask after her current question: at most one follow-up on it, then one new point. Never an old one. */
+export function planNext(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = []): NextPlan {
+  const { counts, current } = askedCounts(scheme, transcript);
+  const result = (id: string) => results.find((r) => r.criterionId === id);
+  const settled = (id: string) => ["full", "parked"].includes(result(id)?.status ?? "");
+  const fresh = scheme.criteria.filter((c) => !counts[c.id] && !settled(c.id));
+  const cur = current ? result(current) : undefined;
+  const followUp =
+    cur && (counts[cur.criterionId] ?? 0) < MAX_ATTEMPTS && ["partial", "missed"].includes(cur.status) && cur.missingSteps.length > 0
+      ? { id: cur.criterionId, missing: cur.missingSteps[0] }
+      : null;
+  return { asked: scheme.criteria.filter((c) => counts[c.id]).map((c) => c.id), current, followUp, next: fresh[0] ?? null, left: fresh.length };
+}
+
+/** How a point is put to the student: one ask, and for a board task the board is named inside the same sentence. */
+export function askLine(c: { title: string; probe?: string; ask?: "say" | "write" | "draw" }): string {
+  const q = singleAsk(c.probe ?? `Can you explain ${c.title}?`);
+  return c.ask === "write" || c.ask === "draw" ? `"${q}" (a board task: ask them to ${c.ask} it on the board inside that one sentence, never as a second sentence)` : `"${q}"`;
+}
+
+/**
+ * The private note Sam gets right after she asks a question: what is off limits, and the single new
+ * question that may follow. Facts and one instruction, short enough to be followed.
+ */
+export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = []): string {
+  const plan = planNext(scheme, results, transcript);
+  const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
+  const cur = scheme.criteria.find((c) => c.id === plan.current);
+  return [
+    PRIVATE_NOTE,
+    plan.asked.length ? `Already asked, never ask about these again in any wording: ${plan.asked.map(title).join("; ")}.` : "",
+    cur && (cur.ask === "write" || cur.ask === "draw")
+      ? "Your current question is a board task: when they say they are done, call capture_whiteboard before you say anything, then mention one specific thing you can see in what they wrote."
+      : "",
+    plan.followUp
+      ? `If their answer leaves it out, you may ask ONE follow-up on "${title(plan.followUp.id)}" about this, without stating it: "${plan.followUp.missing}".`
+      : cur
+      ? `Do not ask a second question about "${cur.title}".`
+      : "",
+    plan.next
+      ? `Your next new question, once they have answered: ${askLine(plan.next)}. Ask only that.`
+      : "Every point has now been asked. After their answer, call get_rail_status: it lists any point to go back over once.",
+    plan.left > 0 ? `${plan.left} point${plan.left === 1 ? " has" : "s have"} not been asked yet, so do not offer or mention their results.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function askedNote(transcript: TimedLine[] = []): string {
   const asked: string[] = [];
   for (const l of transcript.filter((x) => x.speaker !== "student").slice(-8)) {
@@ -228,23 +366,28 @@ export function railStatusText(scheme: MarkScheme, results: CriterionResult[], f
   const open = (r: CriterionResult) => r.status !== "full" && r.status !== "parked";
   const focus = focusIds.map((id) => results.find((r) => r.criterionId === id)).filter((r): r is CriterionResult => !!r && open(r));
   // Always name one point to ask about while any is open (never leave Sam without a next question).
+  // Never back to a point she has already asked about twice, and new points before asked ones (T32).
+  const { counts, current } = askedCounts(scheme, transcript);
+  const times = (r: CriterionResult) => counts[r.criterionId] ?? 0;
   const nextUp =
     focus[0] ??
-    results.find((r) => r.status === "not_covered") ??
-    results.find((r) => open(r) && r.status !== "in_progress") ??
-    results.find(open);
+    results.find((r) => r.status === "not_covered" && times(r) === 0) ??
+    results.find((r) => open(r) && r.status !== "in_progress" && times(r) < MAX_ATTEMPTS) ??
+    results.find((r) => open(r) && times(r) < MAX_ATTEMPTS);
   const board = boardNote(scheme, results);
   // Before moving on, probe the point they just explained if part of it is still missing (the active
   // point first, else any other partly explained one that has not used its two tries).
   // "missed" counts too: a student who knows the point but forgot to say it can still earn it.
-  const partly = (r: CriterionResult) => open(r) && r.missingSteps.length > 0 && r.attempts < 2 && r.status !== "not_covered";
+  const partly = (r: CriterionResult) => open(r) && r.missingSteps.length > 0 && r.attempts < 2 && times(r) < MAX_ATTEMPTS && r.status !== "not_covered";
   // Once every point has been touched, sweep back over the ones that still lost marks.
   const sweep = !focus.length && !results.some((r) => r.status === "not_covered") ? results.filter(partly) : [];
-  const followUp = results.find((r) => r.criterionId === active && partly(r)) ?? results.find(partly);
+  // Once Sam has asked questions, only the point she asked about LAST gets a follow-up: chasing an older
+  // point's missing step made her ask again what the student had already done (T32). Older points wait for the sweep.
+  const followUp = current
+    ? results.find((r) => r.criterionId === current && partly(r))
+    : (results.find((r) => r.criterionId === active && partly(r)) ?? results.find(partly));
   const next = nextUp ? scheme.criteria.find((c) => c.id === nextUp.criterionId) : undefined;
-  const nextAsk = next?.probe
-    ? ` Ask it in your own words, keeping its specifics: "${next.probe}"${next.ask && next.ask !== "say" ? `, and have them ${next.ask} it on the board, then wait quietly` : ""}.`
-    : "";
+  const nextAsk = next?.probe ? ` Ask it in your own words, keeping its specifics, as ONE sentence: ${askLine(next)}.` : "";
   return [
     `Rail: ${awarded}/${total} marks so far.`,
     askedNote(transcript),
