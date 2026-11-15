@@ -8,12 +8,13 @@ import type { ApiError } from "@/types/session";
 export const maxDuration = 30;
 
 const MODEL = process.env.BOARD_READ_MODEL ?? "claude-haiku-5-5";
-const Body = z.object({ whiteboardBase64: z.string().min(100).max(8_000_000) });
+const Body = z.object({ whiteboardBase64: z.string().min(100).max(8_000_000), context: z.string().max(2000).optional() });
 const Out = z.object({ text: z.string() });
 
 const SYSTEM = `You read a student's whiteboard image for a classmate. Reply with JSON {"text": "..."}.
 - Describe only what is clearly written or drawn: transcribe equations exactly, name diagrams and their labels, in one to three short sentences. For maths, speak it in words ("x squared plus five x plus six equals zero").
 - Indigo handwriting next to a small "Sam" tag is the question Sam wrote: ignore it.
+- Handwriting is ambiguous between b and 6, h and 4, l and 1, x and times, s and 5, o and 0. Use the recent conversation (given with the image) to decide: a student who says "B H over two" wrote b, not 6. When it is still unclear, write both, e.g. "b (or 6)", never one with confidence.
 - If the board is empty, or the writing is too unclear to read, reply {"text": ""}. Never guess or invent content.`;
 
 export async function POST(req: Request) {
@@ -24,7 +25,10 @@ export async function POST(req: Request) {
     const out = await generateJson({
       model: MODEL,
       system: SYSTEM,
-      userText: "Read this whiteboard.",
+      userText: parsed.data.context ? `Recent conversation (to settle ambiguous handwriting only):
+${parsed.data.context}
+
+Read this whiteboard.` : "Read this whiteboard.",
       image: { pngBase64: parsed.data.whiteboardBase64 },
       schema: Out,
       maxTokens: 1500,

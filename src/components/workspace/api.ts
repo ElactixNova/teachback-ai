@@ -41,7 +41,7 @@ export async function parsePdf(file: File): Promise<CurriculumContext> {
 export const fetchMarkScheme = (req: MarkSchemeRequest) => postJson<MarkScheme>("/api/mark-scheme", req);
 
 /** A fast plain-words read of the whiteboard (Haiku), for Sam. "" when empty or unreadable. */
-export const readBoard = (whiteboardBase64: string) => postJson<{ text: string }>("/api/board-read", { whiteboardBase64 }).then((r) => r.text);
+export const readBoard = (whiteboardBase64: string, context?: string) => postJson<{ text: string }>("/api/board-read", { whiteboardBase64, context }).then((r) => r.text);
 
 export const analyzeFinal = (req: Omit<AnalyzeRequest, "mode">) => postJson<GapReport>("/api/analyze", { ...req, mode: "final" });
 

@@ -363,7 +363,7 @@ export function Workspace() {
         const v = latest.current.boardVersion;
         if (boardReadRef.current?.version === v) return boardReadRef.current.promise;
         const png = boardRef.current?.exportSnapshotBase64();
-        const promise = png ? readBoard(png).catch(() => "") : Promise.resolve("");
+        const promise = png ? readBoard(png, timed(latest.current.transcript).slice(-6).map((l) => `${l.speaker === "avatar" ? "Sam" : "Student"}: ${l.text}`).join("\n")).catch(() => "") : Promise.resolve("");
         boardReadRef.current = { version: v, promise };
         return promise;
       },
