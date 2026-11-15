@@ -5,7 +5,7 @@ import { Flag, LoaderCircle, Sparkles } from "lucide-react";
 import type { CriterionResult, Cue, CurriculumContext, GapReport, MarkScheme, TimedLine, VisualExplainer } from "@/types/session";
 import { createAnamAvatarBridge } from "@/lib/anam/bridge";
 import { visualRequestForCriterion } from "@/lib/fal/request";
-import { emptyResults, finalizeReport, liveFocusId, mergeLiveResults, parkResult, skipTarget } from "@/lib/rail/state";
+import { emptyResults, finalizeReport, fitResults, liveFocusId, mergeLiveResults, parkResult, skipTarget } from "@/lib/rail/state";
 import { useLiveAnalysis } from "@/lib/rail/useLiveAnalysis";
 import { AvatarPanel, type LiveLine } from "./AvatarPanel";
 import { CentrePanel } from "./CentrePanel";
@@ -171,11 +171,8 @@ export function Workspace() {
   const editScheme = (s: MarkScheme) => {
     latest.current.markScheme = s;
     setScheme({ status: "ready", data: s });
-    // Keep progress for criteria that still exist; new ones start empty.
-    updateResults((prev) => {
-      const byId = new Map(prev.map((r) => [r.criterionId, r]));
-      return emptyResults(s).map((e) => byId.get(e.criterionId) ?? e);
-    });
+    // Keep progress for criteria that still exist (capped to their new marks: fitResults); new ones start empty.
+    updateResults((prev) => fitResults(s, prev));
   };
 
   // ---- Live marking (T11 decides when; we own the results) ---------------------------------------
