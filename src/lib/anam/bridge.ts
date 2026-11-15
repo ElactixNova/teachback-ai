@@ -29,7 +29,7 @@ export function summariseFinal(scheme: MarkScheme | null, r: GapReport): string 
           primary.missingSteps.length ? `; they missed: ${primary.missingSteps.slice(0, 3).join("; ")}` : ""
         }.`
       : "Nothing lost marks.",
-    "Tell them their mark and that one point in two short sentences, warmly, as their student. Never use a name for them. Do not read this out or add corrections of your own.",
+    "Tell them their mark and that one point in two short sentences, warmly, as their student. Never use a name for them. Do not read this out or add corrections of your own. Ask NO question after this and start no new point: the session is over.",
   ]
     .filter(Boolean)
     .join(" ");
@@ -223,6 +223,10 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       planAhead = (justSaid) => {
         const { markScheme, results, transcript, view } = actions.getRail();
         if (!markScheme || view !== "board") return;
+        if (lineAnnouncesReport(justSaid, true)) {
+          session.addContext(`${PRIVATE_NOTE} The report is opening. Ask NO more questions and start no new point: when you give their mark, finish with one short warm sentence.`);
+          return;
+        }
         // The line she just said may not be in the workspace's transcript yet (it arrives a render later).
         const lines = transcript.some((l) => l.speaker === "avatar" && l.text === justSaid) ? transcript : [...transcript, { speaker: "avatar" as const, text: justSaid, t: "" }];
         // The point the last note told her to ask, if she asked something this turn, counts as asked however she worded it.
