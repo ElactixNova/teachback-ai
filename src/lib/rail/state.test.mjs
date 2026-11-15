@@ -1,7 +1,7 @@
 // Run: node --test src/lib/rail/state.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyResults, finalizeReport, findCriterion, initialRail, liveFocusId, mergeLive, mergeLiveResults, mmss, parkResult, railChangeNote, railStatusText, toTimedLines, askLine, askedCounts, planNext, planNote, singleAsk, boardAnswerNote, skipTarget } from "./state.ts";
+import { boardLooksWrong, fitResults, emptyResults, finalizeReport, findCriterion, initialRail, liveFocusId, mergeLive, mergeLiveResults, mmss, parkResult, railChangeNote, railStatusText, toTimedLines, askLine, askedCounts, planNext, planNote, singleAsk, boardAnswerNote, skipTarget } from "./state.ts";
 
 const scheme = {
   topic: "Photosynthesis",
@@ -404,4 +404,52 @@ test("skipTarget: the live focus first, then the first open point; parked and fu
   assert.equal(skipTarget(scheme, allDone), null);
   const c1Full = empty.map((x) => (x.criterionId === "c1" ? { ...x, status: "full", awarded: 3 } : x));
   assert.equal(skipTarget(scheme, c1Full), "c2");
+});
+
+test("fitResults: editing a point down caps its marks, so the score never passes 100%", () => {
+  const live = emptyResults(scheme).map((x) => (x.criterionId === "c1" ? { ...x, status: "full", awarded: 3, missingSteps: [] } : x));
+  const edited = { ...scheme, totalMarks: 3, criteria: [{ ...scheme.criteria[0], expected: ["glucose"], marks: 1 }, scheme.criteria[1]] };
+  const fitted = fitResults(edited, live);
+  assert.equal(fitted[0].awarded, 1);
+  assert.equal(fitted[0].status, "full");
+  const { awarded, total } = finalizeReport(edited, { awarded: 0, total: 3, primaryGapId: null, studyPlan: [], results: [] }, live);
+  assert.ok(awarded <= total, `${awarded} / ${total}`);
+  // Missing steps that no longer exist are replaced by the criterion's current steps.
+  const stale = [{ ...emptyResults(scheme)[0], status: "partial", awarded: 1, missingSteps: ["water", "glucose"] }];
+  const two = { ...scheme, criteria: [{ ...scheme.criteria[0], expected: ["CO2", "sugar"], marks: 2 }, scheme.criteria[1]] };
+  assert.deepEqual(fitResults(two, stale)[0].missingSteps, ["sugar"]);
+});
+
+test("finalizeReport: a later contradiction keeps the final mark and its fix; an earlier stricter final mark does not", () => {
+  const live = emptyResults(scheme).map((x) => (x.criterionId === "c2" ? { ...x, status: "full", awarded: 2, missingSteps: [], evidence: { quote: "in the chloroplasts of leaves", timestamp: "00:30" } } : x));
+  const later = { criterionId: "c2", status: "missed", awarded: 0, missingSteps: ["leaves", "chloroplasts"], attempts: 0, parked: false, fix: "You later said it happens in the roots.", evidence: { quote: "actually it happens in the roots", timestamp: "01:40" } };
+  const out = finalizeReport(scheme, { awarded: 0, total: 5, primaryGapId: "c2", studyPlan: [], results: [later] }, live);
+  const c2 = out.results.find((r) => r.criterionId === "c2");
+  assert.equal(c2.awarded, 0);
+  assert.match(c2.fix, /roots/);
+  // Same verdict but based on the SAME early line: the live mark still wins (marks never go down for nothing new).
+  const same = { ...later, evidence: { quote: "in the chloroplasts of leaves", timestamp: "00:30" } };
+  assert.equal(finalizeReport(scheme, { awarded: 0, total: 5, primaryGapId: "c2", studyPlan: [], results: [same] }, live).results[1].awarded, 2);
+  // Minutes past 99 still order correctly.
+  const late = { ...later, evidence: { quote: "actually it happens in the roots", timestamp: "100:05" } };
+  const live99 = live.map((x) => (x.criterionId === "c2" ? { ...x, evidence: { ...x.evidence, timestamp: "99:59" } } : x));
+  assert.equal(finalizeReport(scheme, { awarded: 0, total: 5, primaryGapId: "c2", studyPlan: [], results: [late] }, live99).results[1].awarded, 0);
+});
+
+test("board answer: a neutral example (never the triangle formula), and a wrong board makes Sam ask them to check, not restate it", () => {
+  const plain = boardAnswerNote(scheme, emptyResults(scheme), [], []);
+  assert.doesNotMatch(plain, /over two|base times height/);
+  const wrong = emptyResults(scheme).map((x) =>
+    x.criterionId === "c1" ? { ...x, status: "partial", awarded: 1, boardObservation: "Board shows $CO_2 + H_2O \to O_2$.", fix: "Glucose is missing." } : x,
+  );
+  const focused = wrong.map((x) => (x.criterionId === "c1" ? { ...x, status: "in_progress" } : x));
+  assert.equal(boardLooksWrong(scheme, focused), false, "in_progress is still being written");
+  assert.equal(boardLooksWrong(scheme, wrong, [{ speaker: "avatar", text: "Could you write the inputs and outputs?", t: "00:01" }]), true);
+  const note = boardAnswerNote(scheme, wrong, [{ speaker: "avatar", text: "Could you write the inputs and outputs?", t: "00:01" }], []);
+  assert.match(note, /Do NOT say it back as a fact/);
+  assert.match(note, /never say what the right answer/);
+  assert.doesNotMatch(note, /Glucose is missing/, "the fix (the answer) never reaches Sam");
+  assert.doesNotMatch(note, /Then ask: /);
+  const unfinished = wrong.map((x) => ({ ...x, boardUnfinished: true }));
+  assert.equal(boardLooksWrong(scheme, unfinished, [{ speaker: "avatar", text: "Could you write the inputs and outputs?", t: "00:01" }]), false);
 });

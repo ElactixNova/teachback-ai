@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { examineFinal, examineLive } from "@/lib/curriculum/examine";
+import { fitTranscript } from "@/lib/curriculum/limits";
 import type { AnalyzeRequest, ApiError } from "@/types/session";
 
 // A long timeout: final marking with the strongest model can take ~10-20s.
@@ -9,8 +10,8 @@ export const maxDuration = 60;
 
 const fail = (status: number, error: string) => NextResponse.json<ApiError>({ error }, { status });
 
-const MAX_LINES = 600;
-const MAX_TRANSCRIPT_CHARS = 80_000;
+// Accept a long session and fit it under the model limits here (fitTranscript), instead of failing the report.
+const MAX_LINES_ACCEPTED = 10_000;
 const MAX_IMAGE_CHARS = 6_000_000; // base64, about 4.5 MB of PNG
 
 const RequestSchema = z.object({
@@ -22,7 +23,7 @@ const RequestSchema = z.object({
       .min(1)
       .max(12),
   }).passthrough(),
-  transcript: z.array(z.object({ speaker: z.enum(["student", "avatar"]), text: z.string(), t: z.string() })).max(MAX_LINES),
+  transcript: z.array(z.object({ speaker: z.enum(["student", "avatar"]), text: z.string(), t: z.string() })).max(MAX_LINES_ACCEPTED),
   whiteboardBase64: z.string().max(MAX_IMAGE_CHARS).optional(),
 });
 
@@ -38,8 +39,11 @@ export async function POST(req: Request) {
     return fail(400, `Bad request: ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   }
   const body = parsed.data as unknown as AnalyzeRequest;
-
-  if (body.transcript.reduce((n, l) => n + l.text.length, 0) > MAX_TRANSCRIPT_CHARS) return fail(413, "The transcript is too long to mark.");
+  const ids = body.markScheme.criteria.map((c) => c.id);
+  if (new Set(ids).size !== ids.length) return fail(400, "Bad request: every criterion needs its own id.");
+  // Mark the scheme as sent: the total is recomputed, never trusted from the client.
+  body.markScheme = { ...body.markScheme, totalMarks: body.markScheme.criteria.reduce((n, c) => n + c.marks, 0) };
+  body.transcript = fitTranscript(body.transcript);
   const studentSaid = body.transcript.some((l) => l.speaker === "student" && l.text.trim());
   if (!studentSaid && !body.whiteboardBase64) return fail(400, "Explain or draw something first.");
   if (!process.env.ANTHROPIC_API_KEY) return fail(500, "ANTHROPIC_API_KEY is not set on the server.");
