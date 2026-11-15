@@ -49,6 +49,9 @@ const mmss = (ms: number) => {
 const timed = (lines: TranscriptLine[]): TimedLine[] =>
   lines.filter((l): l is TranscriptLine & { speaker: Speaker } => l.speaker !== "system").map(({ speaker, text, t }) => ({ speaker, text, t }));
 
+/** What a picture shows: the point and the steps still missing, so a new report that changes nothing reuses it. */
+const visualKey = (criterionId: string, missing: string[], topic: string) => `${criterionId}|${missing.join("¦")}|${topic}`;
+
 export function Workspace() {
   const boardRef = useRef<WhiteboardHandle>(null);
 
@@ -123,6 +126,14 @@ export function Workspace() {
     setResults(next);
   }, []);
 
+  /** Every picture already requested, by what it shows ("<point>|<missing steps>|<topic>"): the same image is never paid for twice (T54). */
+  const visualCache = useRef(new Map<string, Promise<VisualExplainer | null>>());
+  /** Pictures started speculatively during the session (a point the student has left with marks lost). */
+  const prefetched = useRef(0);
+  /** The report key a speculative final marking last ran for, and how many ran (at most two per session). */
+  const prefetchedFinal = useRef("");
+  const prefetchedFinals = useRef(0);
+
   // ---- Mark scheme ----------------------------------------------------------------------------
   const schemeSeq = useRef(0);
   const resetSession = useCallback((s: MarkScheme | null) => {
@@ -130,6 +141,10 @@ export function Workspace() {
     latest.current.report = null;
     setReport(null);
     setVisuals({});
+    visualCache.current.clear();
+    prefetched.current = 0;
+    prefetchedFinals.current = 0;
+    prefetchedFinal.current = "";
     setNotes({ status: "idle" });
     setCheck({ status: "idle" });
     setFocusIds([]);
@@ -216,43 +231,50 @@ export function Workspace() {
   // ---- Final marking --------------------------------------------------------------------------
   const finalRun = useRef<{ key: string; promise: Promise<GapReport | null> } | null>(null);
   const reportKey = useRef("");
-  /** "<reportKey>:<criterionId>" of every visual already requested, so the same image is never paid for twice. */
-  const requestedVisuals = useRef(new Set<string>());
 
   const generateVisualExplainer = useCallback(async (criterionId?: string, force = false): Promise<VisualExplainer | null> => {
-    const { report: r, markScheme: s } = latest.current;
+    const { report: r, markScheme: s, results: live } = latest.current;
     const id = criterionId ?? r?.primaryGapId;
     const c = s?.criteria.find((x) => x.id === id);
-    const res = r?.results.find((x) => x.criterionId === id);
-    if (!r || !s || !c || !res) return null;
-    const tag = `${reportKey.current}:${c.id}`;
-    if (!force && requestedVisuals.current.has(tag)) return null;
-    requestedVisuals.current.add(tag);
-    setVisuals((v) => ({ ...v, [c.id]: { status: "loading" } }));
-    // Ignore results that arrive after a newer report replaced this one.
-    const setForThisReport = (state: VisualState) => {
-      if (latest.current.report === r) setVisuals((v) => ({ ...v, [c.id]: state }));
+    const res = (r?.results ?? live).find((x) => x.criterionId === id);
+    if (!s || !c || !res) return null;
+    const key = visualKey(c.id, res.missingSteps, s.topic);
+    // Ignore results that arrive after the mark scheme was replaced.
+    const setFor = (state: VisualState) => {
+      if (latest.current.markScheme === s) setVisuals((v) => ({ ...v, [c.id]: state }));
     };
-    try {
-      const visual = await generateVisual(visualRequestForCriterion(c, res, s.topic));
-      setForThisReport({ status: "ready", data: visual });
-      return visual;
-    } catch (e) {
-      setForThisReport({ status: "error", error: e instanceof Error ? e.message : "Could not draw this one." });
-      return null;
+    const cached = visualCache.current.get(key);
+    if (cached && !force) {
+      void cached.then((v) => v && setFor({ status: "ready", data: v }));
+      return cached;
     }
+    setFor({ status: "loading" });
+    const promise = (async () => {
+      try {
+        const visual = await generateVisual(visualRequestForCriterion(c, res, s.topic));
+        setFor({ status: "ready", data: visual });
+        return visual;
+      } catch (e) {
+        visualCache.current.delete(key); // a failed picture may be asked for again
+        setFor({ status: "error", error: e instanceof Error ? e.message : "Could not draw this one." });
+        return null;
+      }
+    })();
+    visualCache.current.set(key, promise);
+    return promise;
   }, []);
 
   /** Final marking, shared between callers; reuses the last report if nothing changed since. */
-  const runFinal = useCallback((): Promise<GapReport | null> => {
+  const runFinal = useCallback((quiet = false): Promise<GapReport | null> => {
     const { markScheme: s, transcript: lines, boardVersion: bv, report: last } = latest.current;
     if (!s) {
       setCheck({ status: "error", error: "Upload your lecture notes first, so there is a mark scheme to grade against." });
       return Promise.resolve(null);
     }
-    const key = `${timed(lines).length}:${bv}:${s.criteria.length}:${s.totalMarks}`;
+    // Only what the student said or drew changes the marks, so Sam's own lines never invalidate a report (T54).
+    const key = `${timed(lines).filter((l) => l.speaker === "student").length}:${bv}:${s.criteria.length}:${s.totalMarks}`;
     if (last && reportKey.current === key) {
-      setCheck({ status: "idle" });
+      if (!quiet) setCheck({ status: "idle" });
       return Promise.resolve(last);
     }
     if (finalRun.current?.key === key) return finalRun.current.promise;
@@ -262,7 +284,7 @@ export function Workspace() {
       setCheck({ status: "error", error: "Explain something first: talk to Sam, type below the video, or sketch on the whiteboard." });
       return Promise.resolve(null);
     }
-    setCheck({ status: "checking" });
+    if (!quiet) setCheck({ status: "checking" });
     finalEpoch.current++;
     const promise = (async () => {
       try {
@@ -273,13 +295,12 @@ export function Workspace() {
         latest.current.report = r;
         setReport(r);
         updateResults(() => r.results);
-        setVisuals({});
         setNotes({ status: "idle" });
         latest.current.notes = { status: "idle" };
-        setCheck({ status: "idle" });
+        if (!quiet) setCheck({ status: "idle" });
         return r;
       } catch (e) {
-        setCheck({ status: "error", error: e instanceof Error ? e.message : "The check failed. Try again." });
+        if (!quiet) setCheck({ status: "error", error: e instanceof Error ? e.message : "The check failed. Try again." });
         return null;
       } finally {
         if (finalRun.current?.key === key) finalRun.current = null;
@@ -297,6 +318,28 @@ export function Workspace() {
     if (r && s) for (const g of gapsOf(s, r).slice(0, MAX_LEARN_IMAGES)) void generateVisualExplainer(g.criterion.id);
     return r;
   }, [runFinal, generateVisualExplainer]);
+
+  // Work ahead (T54): a point the student has left with marks lost gets its picture now, and once every point has been
+  // touched the final marking runs quietly, so the report and its pictures are mostly ready when they ask for it.
+  const MAX_PREFETCH_IMAGES = 3;
+  useEffect(() => {
+    if (avatarStatus !== "live" || !markScheme || view !== "board") return;
+    const focus = liveFocusId(results);
+    for (const r of results) {
+      if (prefetched.current >= MAX_PREFETCH_IMAGES) break;
+      if (r.criterionId === focus || r.attempts < 1 || !["partial", "missed"].includes(r.status) || r.missingSteps.length === 0) continue;
+      if (visualCache.current.has(visualKey(r.criterionId, r.missingSteps, markScheme.topic))) continue;
+      prefetched.current++;
+      void generateVisualExplainer(r.criterionId);
+    }
+    const touched = results.length > 0 && results.every((r) => r.status !== "not_covered" && r.status !== "in_progress");
+    const key = `${transcript.filter((l) => l.speaker === "student").length}:${boardVersion}`;
+    if (touched && prefetchedFinals.current < 2 && prefetchedFinal.current !== key && transcript.some((l) => l.speaker === "student")) {
+      prefetchedFinal.current = key;
+      prefetchedFinals.current++;
+      void runFinal(true);
+    }
+  }, [results, avatarStatus, markScheme, view, transcript, boardVersion, generateVisualExplainer, runFinal]);
 
   const loadNotes = useCallback(async (r: GapReport) => {
     const { markScheme: s, curriculum: cur } = latest.current;
