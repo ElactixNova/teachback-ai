@@ -5,7 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
-import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote, planOffer } from "@/lib/rail/state";
+import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote, planOffer, boardAnswerNote } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
 import { spokenToLatex } from "@/lib/math/spoken";
@@ -118,7 +118,7 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
         const { markScheme, results } = actions.getRail();
         const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
         return seen
-          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply, using only what is written above and adding no detail of your own. Then end with ONE short, specific question about something you can see (a label, a number, a step), but only if you genuinely wonder about it. Never ask them to calculate, draw or write anything new, and never ask what they will do next. If nothing specific puzzles you, or the writing looks uncertain, say \"Anything to add, or shall I move on?\" instead. Never ask for something already on the board. That one question is your whole turn: do not start a new point or ask anything else.`
+          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer. ${boardAnswerNote(markScheme, results, actions.getRail().transcript)} That one question is your whole turn.`
           : "They have drawn on the whiteboard but you cannot make out what it says. Do NOT describe or guess any content. Say honestly that you cannot quite read it and ask what they wrote.";
       },
     }),
@@ -247,9 +247,9 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
           // They stopped: read the board first, so Sam hears what is written, not only that something was.
           void actions.readBoard().catch(() => "").then((read) => {
             if (turn !== boardTurn) return; // they picked the pen up again meanwhile
-            const { markScheme, results } = actions.getRail();
+            const { markScheme, results, transcript } = actions.getRail();
             const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
-            session.addContext(`${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.${seen ? ` ${seen} Say one specific thing about it using only those words, then end with ONE short, specific question about something you can see (a label, a number, a step), but only if you genuinely wonder about it. Never ask them to calculate, draw or write anything new, and never ask what they will do next, and never ask for something already on the board. If nothing specific puzzles you, say \"Anything to add, or shall I move on?\". That one question is your whole turn: do not start a new point or ask anything else.` : ""}`);
+            session.addContext(`${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.${seen ? ` ${seen} ${boardAnswerNote(markScheme, results, transcript, told, followed)} That one question is your whole turn.` : ""}`);
           });
         },
         setFocus: (criteria) => {

@@ -327,6 +327,22 @@ export function planOffer(scheme: MarkScheme, results: CriterionResult[], transc
   return { kind: "none", id: null };
 }
 
+/** What Sam does once a point is finished: the next planned question, one follow-up, or (only when nothing is left) one check that they are done. */
+export function nextStep(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], followed: Iterable<string> = []): string {
+  const plan = planNext(scheme, results, transcript, told);
+  const offer = planOffer(scheme, results, transcript, told, followed);
+  const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
+  if (offer.kind === "follow" && plan.followUp) return `ask ONE follow-up on \"${title(plan.followUp.id)}\", leading them to this without stating it: \"${plan.followUp.missing}\".`;
+  if (offer.kind === "new" && plan.next) return `ask: ${askLine(plan.next)}.`;
+  return "ask \"Anything to add, or shall I move on?\" ONCE. If they answer with anything like nothing to add, that's all, no, nope, finished, move on or let's move on, do NOT ask it again: say \"Okay, let me check your report\" and call get_rail_status.";
+}
+
+/** The sentence after a board read: what the board is, said as their answer, then the next step. Never a guess about a line or label. */
+export function boardAnswerNote(scheme: MarkScheme | null, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], followed: Iterable<string> = []): string {
+  const tail = scheme ? ` Then ${nextStep(scheme, results, transcript, told, followed)}` : "";
+  return `If it answers what you asked them to write or draw, say in your own words what it shows, as their answer (for example "Oh, so the area is base times height over two"). Use only the words above: never guess what a line or label is, never ask whether something on the board is what it is, never ask for something already on the board, and never ask them to calculate, draw or write anything new except the question below.${tail}`;
+}
+
 export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], allowNew = true, followed: Iterable<string> = []): string {
   const plan = planNext(scheme, results, transcript, told);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
@@ -335,13 +351,7 @@ export function planNote(scheme: MarkScheme, results: CriterionResult[], transcr
   // Pace (T37/T38): what is rate-limited is the question, by turn count (`allowNew`, decided by the bridge). The turns
   // in between end with a plain invitation, so the student is never left with a flat statement, and never quizzed.
   const react = !allowNew;
-  // When they have just finished a point, the natural next step is the next question; only when nothing is left does she check they are done.
-  const finishedAsk =
-    offer.kind === "follow" && plan.followUp
-      ? `then ask ONE follow-up on \"${title(plan.followUp.id)}\", leading them to this without stating it: \"${plan.followUp.missing}\".`
-      : offer.kind === "new" && plan.next
-      ? `then ask: ${askLine(plan.next)}.`
-      : "then ask \"Anything to add, or shall I move on?\" ONCE. If they answer that they have nothing to add, or say that's all, no, nope or finished, do NOT ask it again: say \"Okay, let me check your report\" and call get_rail_status.";
+  const finishedAsk = nextStep(scheme, results, transcript, told, followed);
   return [
     PRIVATE_NOTE,
     react
