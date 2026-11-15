@@ -27,7 +27,7 @@ export interface AnamPersonaConfig {
   avatarModel: string;
   voiceId: string;
   /** ElevenLabs flash v2.5 (the default voice): speed 0.7-1.2. Slower speech leaves a beat at full stops (T40). */
-  voiceGenerationOptions: { speed: number };
+  voiceGenerationOptions: { speed: number } | { model: string; stability?: number };
   llmId: string;
   systemPrompt: string;
   maxSessionLengthSeconds: number;
@@ -128,7 +128,10 @@ export function buildPersonaConfig(ctx: PersonaContext = {}): AnamPersonaConfig 
     avatarId: env.ANAM_AVATAR_ID || DEFAULTS.avatarId,
     avatarModel: env.ANAM_AVATAR_MODEL || DEFAULTS.avatarModel,
     voiceId: env.ANAM_VOICE_ID || DEFAULTS.voiceId,
-    voiceGenerationOptions: { speed: Math.min(1.2, Math.max(0.7, Number(env.ANAM_VOICE_SPEED) || 0.9)) },
+    // ANAM_VOICE_MODEL (for example eleven_v4_turbo) swaps the ElevenLabs model; v3/v4 have no speed setting, so none is sent. Unset it to go back.
+    voiceGenerationOptions: env.ANAM_VOICE_MODEL
+      ? { model: env.ANAM_VOICE_MODEL, ...(env.ANAM_VOICE_STABILITY ? { stability: Math.min(1, Math.max(0, Number(env.ANAM_VOICE_STABILITY))) } : {}) }
+      : { speed: Math.min(1.2, Math.max(0.7, Number(env.ANAM_VOICE_SPEED) || 0.9)) },
     llmId: env.ANAM_LLM_ID || DEFAULTS.llmId,
     systemPrompt: rail ? buildRailSystemPrompt(ctx) : buildSystemPrompt(ctx),
     maxSessionLengthSeconds: 900,
