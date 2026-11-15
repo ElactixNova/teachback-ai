@@ -355,6 +355,6 @@ test("T32 rail status: a point already asked twice is never the next question, a
 test("T33 pacing: right after Sam asked, her next turn is a reaction with no question named", () => {
   const asked = [...session, said("03:50", "student", "x equals minus b")];
   const note = planNote(quad, untouched(quad), [...asked, said("03:51", "avatar", "What does the discriminant tell you?")]);
-  assert.match(note, /PACE: after they answer, do NOT ask a question/);
+  assert.match(note, /PACE: your next reply must have NO question mark/);
   assert.doesNotMatch(note, /Your next new question/);
 });

@@ -329,8 +329,8 @@ export function planNote(scheme: MarkScheme, results: CriterionResult[], transcr
   return [
     PRIVATE_NOTE,
     react
-      ? "PACE: after they answer, do NOT ask a question on your next turn. Say back in your own words ONE specific thing they just said, using their own words or numbers, then invite them to carry on (for example \"Okay, so you ... mm, go on\"). If something they said confuses you or seems to contradict itself, say which part confuses you instead. Keep it to one or two short sentences."
-      : "PACE: you have just reacted, so your next turn may ask one question.",
+      ? "PACE: your next reply must have NO question mark. Reflect ONE thing they just said in under twelve words, in fresh wording (not \"Okay, so you said\"), the way a classmate would, and stop. Do not recite their whole answer. If something confuses you, say which part instead."
+      : "PACE: your next reply may include ONE question, after a short reaction in fresh wording. If they said what they will cover next, or invited you to choose, follow their lead.",
     plan.asked.length ? `Already asked, never ask about these again in any wording: ${plan.asked.map(title).join("; ")}.` : "",
     cur && (cur.ask === "write" || cur.ask === "draw")
       ? "Your current question is a board task: when they say they are done, call capture_whiteboard before you say anything, then mention one specific thing you can see in what they wrote."
