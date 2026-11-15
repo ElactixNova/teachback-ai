@@ -1,7 +1,7 @@
 // Run: node --test src/lib/rail/state.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyResults, finalizeReport, findCriterion, initialRail, liveFocusId, mergeLive, mergeLiveResults, mmss, parkResult, railChangeNote, railStatusText, toTimedLines, askLine, askedCounts, planNext, planNote, singleAsk } from "./state.ts";
+import { emptyResults, finalizeReport, findCriterion, initialRail, liveFocusId, mergeLive, mergeLiveResults, mmss, parkResult, railChangeNote, railStatusText, toTimedLines, askLine, askedCounts, planNext, planNote, singleAsk, boardAnswerNote } from "./state.ts";
 
 const scheme = {
   topic: "Photosynthesis",
@@ -376,9 +376,19 @@ test("T41 pacing: a finished answer is not met with 'keep going'", () => {
   const note = planNote(scheme, emptyResults(scheme), [], [], false);
   assert.match(note, /FINISHED with it: never say keep going/);
   // A point is still open: finishing leads to the next question, not to 'anything to add'.
-  assert.match(note, /then ask: /);
+  assert.match(note, /and ask: /);
   assert.doesNotMatch(note, /Anything to add/);
   // Every point asked: she checks once, and a 'that's all' goes to the report.
   const allAsked = planNote(scheme, emptyResults(scheme), [], scheme.criteria.map((c) => c.id), false);
   assert.match(allAsked, /Anything to add, or shall I move on\?\" ONCE.*do NOT ask it again.*check your report/);
+});
+
+test("T44 board answer: the board is read as their answer, with the next step and a one-time close, never a guess about a line", () => {
+  const open = boardAnswerNote(scheme, emptyResults(scheme), [], []);
+  assert.match(open, /say in your own words what it shows, as their answer/);
+  assert.match(open, /never ask whether something on the board is what it is/);
+  assert.match(open, /Then ask: /);
+  const done = boardAnswerNote(scheme, emptyResults(scheme), [], scheme.criteria.map((c) => c.id));
+  assert.match(done, /ONCE.*move on or let's move on.*do NOT ask it again/);
+  assert.doesNotMatch(boardAnswerNote(null, [], []), /Then ask/);
 });
