@@ -149,7 +149,8 @@ try {
   const notes = page.getByLabel("Gap notes").first();
   await notes.waitFor({ timeout: 30000 }).catch(() => {});
   const gapText = (await notes.innerText().catch(() => "")).toLowerCase();
-  check("gap notes show a biggest gap", /biggest gap/.test(gapText));
+  // One gap at a time (Figma 84:805): gap 1 is the biggest gap.
+  check("gap notes show the biggest gap first", /gap 1 of \d+/.test(gapText));
   // Model judgement, so it varies run to run: reported as a warning, not a failure.
   if (!/root/.test(gapText)) log("WARN  gap notes did not name the roots misconception (examiner variance; check 2-notes.png)");
   else log("ok    gap notes name the roots misconception");

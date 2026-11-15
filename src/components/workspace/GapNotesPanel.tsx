@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, Check, ImageOff, LoaderCircle, RefreshCw, Sparkles, Square, SquareCheck } from "lucide-react";
-import type { Criterion, CriterionResult, GapReport, MarkScheme } from "@/types/session";
-import { MarksPill, SEVERITY, ScoreRing, SeverityTag, SourceChip, StatusIcon, WORST_FIRST, displayStatus, verdict } from "./status";
+import { useEffect, useRef, useState } from "react";
+import { Check, ImageOff, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
+import type { Criterion, CriterionResult, GapReport, MarkScheme, StudyStep } from "@/types/session";
+import { SEVERITY, ScoreRing, SeverityTag, StatusIcon, WORST_FIRST, displayStatus, verdict } from "./status";
 import type { VisualState } from "./types";
 import { ZoomableImage } from "./ZoomableImage";
-import { AskChip, MissedCallout } from "./callouts";
+import { AskChip } from "./callouts";
 import { MathText } from "./MathText";
 import { WhatYouSaid } from "./WhatYouSaid";
 import { plainMath } from "./math";
@@ -76,73 +77,152 @@ export function VisualSlot({ state, alt, onRetry, compact }: { state: VisualStat
   );
 }
 
-function GapCard({ gap, primary, file, visual, onRetryVisual }: { gap: Gap; primary: boolean; file?: string; visual?: VisualState; onRetryVisual: () => void }) {
+/** Figma Button (4:59): primary = the one main action, quiet = low emphasis. 36px tall, 44 on phone. */
+const BTN = "inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold tracking-[-0.005em] transition disabled:opacity-50 sm:h-9";
+const PRIMARY = `${BTN} bg-accent text-white hover:bg-accent-strong`;
+const QUIET = `${BTN} text-muted hover:bg-canvas hover:text-ink`;
+const OUTLINE = `${BTN} border border-line-strong bg-card text-ink hover:bg-sunk`;
+/** Figma Meta/SemiBold section label. */
+const LABEL = "text-xs font-semibold leading-4 text-faint";
+
+/** A mark-scheme step as a plain sentence. */
+const sentence = (t: string) => (/[.!?:$)]$/.test(t) ? t : `${t}.`);
+
+/**
+ * Figma Visual Explainer (11:150) inside a gap card: Idle ("Show me visually") -> Loading -> Image or Video; Error
+ * offers Retry. The primary gap starts loading on its own; the others wait for the student to ask.
+ */
+function SeeIt({ state, title, onRequest }: { state: VisualState | undefined; title: string; onRequest: () => void }) {
+  const box = "flex min-h-[243px] w-full flex-col items-center justify-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-line-strong bg-canvas p-4 text-center";
+  if (!state || state.status === "idle") {
+    return (
+      <div className={box}>
+        <button type="button" onClick={onRequest} className={OUTLINE}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Figma Icon/spark (3:68), a static 16px SVG */}
+          <img src="/icons/spark.svg" alt="" width={16} height={16} className="h-4 w-4" />
+          Show me visually
+        </button>
+        <p className="text-sm text-faint">A short image or video built from your notes</p>
+      </div>
+    );
+  }
+  if (state.status === "loading") {
+    return (
+      <div className={box} aria-busy>
+        <LoaderCircle className="h-5 w-5 animate-spin text-accent" aria-hidden />
+        <p className="text-sm font-semibold text-muted">Drawing an accurate diagram… about 20 seconds</p>
+      </div>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <div className={box}>
+        <ImageOff className="h-5 w-5 text-faint" aria-hidden />
+        <p className="text-sm text-muted">{state.error}</p>
+        <button type="button" onClick={onRequest} className={OUTLINE}>
+          <RefreshCw className="h-4 w-4" aria-hidden /> Retry
+        </button>
+      </div>
+    );
+  }
+  return (
+    <figure className="w-full">
+      {state.data.kind === "video" ? (
+        <video src={state.data.url} controls autoPlay muted loop playsInline className="max-h-[360px] w-full rounded-[4px] bg-black outline outline-1 -outline-offset-1 outline-black/10" />
+      ) : (
+        <ZoomableImage src={state.data.url} alt={`Diagram: ${plainMath(title)}`} className="max-h-[360px] w-full rounded-[4px] bg-white object-contain outline outline-1 -outline-offset-1 outline-black/10" />
+      )}
+      <figcaption className="mt-1.5 text-xs text-faint">
+        {state.data.kind === "video" ? "Video" : "Image"} · {state.data.model}
+      </figcaption>
+    </figure>
+  );
+}
+
+/**
+ * Figma Gap Card (11:245, as used in "D · One gap at a time" 84:805). Anatomy, always in this order: number + title
+ * + severity · You said · The fix · See it · Practise it, with the severity stripe on the left.
+ */
+function GapCard({
+  gap,
+  index,
+  step,
+  stepNo,
+  visual,
+  onRequestVisual,
+  onPractise,
+}: {
+  gap: Gap;
+  index: number;
+  step?: StudyStep;
+  stepNo: number;
+  visual?: VisualState;
+  onRequestVisual: () => void;
+  onPractise: () => void;
+}) {
   const { criterion: c, result: r } = gap;
   const s = displayStatus(r);
-  const missing = new Set(r.missingSteps);
+  const missing = r.missingSteps.map((m) => m.trim()).filter(Boolean);
   return (
-    <article className={`relative overflow-hidden rounded-lg border bg-card p-4 pl-5 sm:p-5 sm:pl-6 ${primary ? "border-ink shadow-[var(--shadow-action)]" : "border-line"}`}>
-      <span className={`absolute inset-y-0 left-0 w-1 ${SEVERITY[s]?.bar ?? "bg-line"}`} aria-hidden />
-      <header className="flex items-start gap-3">
-        <StatusIcon status={s} className="mt-0.5" />
-        <div className="min-w-0 flex-1">
-          {primary && <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Biggest gap</p>}
-          <h3 className="font-semibold leading-snug"><MathText text={c.title} /></h3>
-          <AskChip ask={c.ask} className="mt-1" />
-          {s === "parked" && <p className="text-xs font-semibold text-parked">Parked after 2 tries</p>}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <SeverityTag status={s} />
-          <MarksPill result={r} criterion={c} />
-        </div>
+    <article aria-label={`Gap ${index + 1}: ${plainMath(c.title)}`} className="relative flex w-full flex-col gap-6 rounded-[14px] border border-line bg-card px-5 py-6 sm:px-8 sm:py-7">
+      <span className={`absolute inset-y-[17px] -left-px w-[3px] rounded-r-[3px] ${SEVERITY[s]?.bar ?? "bg-line"}`} aria-hidden />
+      <header className="flex items-center gap-2.5">
+        <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-sunk text-xs font-semibold text-muted">{index + 1}</span>
+        <h3 className="min-w-0 flex-1 text-base font-semibold leading-[22px] tracking-[-0.01em] text-ink">
+          <MathText text={c.title} />
+        </h3>
+        <AskChip ask={c.ask} />
+        <SeverityTag status={s} />
       </header>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <WhatYouSaid result={r} />
-        <div className="rounded-xl bg-canvas p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">What the mark scheme wants</p>
-          <ul className="mt-1.5 space-y-1 text-sm leading-relaxed">
-            {c.expected.map((e) => (
-              <li key={e} className="flex gap-2">
-                {missing.has(e) ? (
-                  <Square className="mt-1 h-3.5 w-3.5 shrink-0 text-missed" aria-label="Not earned" />
-                ) : (
-                  <SquareCheck className="mt-1 h-3.5 w-3.5 shrink-0 text-accent" aria-label="Earned" />
-                )}
-                <MathText text={e} className={missing.has(e) ? "" : "text-muted"} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      <WhatYouSaid result={r} />
 
-      {(r.boardObservation || r.fix) && (
-        <dl className="mt-3 space-y-2 text-sm leading-relaxed">
-          {r.boardObservation && (
-            <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">On your board</dt>
-              <dd><MathText text={r.boardObservation} /></dd>
-            </div>
-          )}
-          {r.fix && (
-            <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wider text-accent">How to close it</dt>
-              <dd className="font-semibold"><MathText text={r.fix} /></dd>
-            </div>
-          )}
-        </dl>
+      {r.boardObservation && (
+        <section>
+          <p className={LABEL}>On your board</p>
+          <p className="mt-1.5 text-base leading-6 text-ink">
+            <MathText text={r.boardObservation} />
+          </p>
+        </section>
       )}
 
-      <div className="mt-3">
-        <SourceChip source={c.source} file={file} />
-      </div>
-
-      {primary && (
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(200px,38%)] lg:items-start">
-          <VisualSlot state={visual} alt={`Diagram: ${plainMath(c.title)}`} onRetry={onRetryVisual} />
-          <MissedCallout criterion={c} result={r} showSaid={false} />
-        </div>
+      {(r.fix || missing.length > 0) && (
+        <section>
+          <p className={LABEL}>{r.fix ? "The fix" : "What the full answer needs"}</p>
+          <p className="mt-1.5 text-base leading-6 tracking-[-0.005em] text-ink">
+            {r.fix ? (
+              <MathText text={r.fix} />
+            ) : (
+              missing.map((m, i) => (
+                <span key={m}>
+                  {i > 0 && " "}
+                  <MathText text={sentence(m)} />
+                </span>
+              ))
+            )}
+          </p>
+        </section>
       )}
+
+      <section>
+        <p className={LABEL}>See it</p>
+        <div className="mt-1.5">
+          <SeeIt state={visual} title={c.title} onRequest={onRequestVisual} />
+        </div>
+      </section>
+
+      <section>
+        <p className={LABEL}>Practise it</p>
+        <button type="button" onClick={onPractise} className="mt-1.5 text-left text-sm font-medium leading-5 tracking-[-0.005em] text-accent hover:underline">
+          {step ? (
+            <>
+              Step {stepNo} · <MathText text={step.title} /> · {step.estimatedMinutes} min
+            </>
+          ) : (
+            "Teach this back to Sam"
+          )}
+        </button>
+      </section>
     </article>
   );
 }
@@ -153,135 +233,226 @@ export function GapNotesPanel({ scheme, report, check, visuals, onBack, onRechec
   const notCovered = scheme && report ? scheme.criteria.filter((c) => displayStatus(report.results.find((r) => r.criterionId === c.id)) === "not_covered") : [];
   const fullMarks = scheme && report ? scheme.criteria.filter((c) => report.results.find((r) => r.criterionId === c.id)?.status === "full") : [];
   const minutesLeft = report?.studyPlan.reduce((n, s) => n + (s.done ? 0 : s.estimatedMinutes), 0) ?? 0;
+  const pct = report && report.total > 0 ? Math.round((report.awarded / report.total) * 100) : 0;
+
+  // One gap at a time; the last page is the overview (score, not covered, study plan). A new report starts at gap 1.
+  const [nav, setNav] = useState<{ report: GapReport | null; page: number }>({ report, page: 0 });
+  const pages = gaps.length + 1;
+  const page = nav.report === report ? Math.min(nav.page, pages - 1) : 0;
+  const go = (p: number) => setNav({ report, page: Math.max(0, Math.min(pages - 1, p)) });
+  const gap = page < gaps.length ? gaps[page] : null;
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 });
+  }, [page]);
+
+  const stepFor = (id: string) => {
+    const plan = report?.studyPlan ?? [];
+    const i = plan.findIndex((st) => st.gapId === id);
+    return i >= 0 ? { step: plan[i], stepNo: i + 1 } : { step: undefined, stepNo: 0 };
+  };
 
   return (
-    <section aria-label="Gap notes" className="sheet flex h-full min-h-0 flex-col overflow-hidden">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
-        <div className="min-w-0 flex-1">
-          {report ? (
-            <>
-              <h2 className="text-2xl font-semibold leading-tight">Knowledge Gap Report</h2>
-              <p className="text-sm text-muted">
-                <span className="tabular">{report.awarded} / {report.total} marks</span> · checked against your mark scheme
-              </p>
-            </>
-          ) : (
-            <p className="text-lg font-semibold">Gap notes</p>
-          )}
+    <section aria-label="Gap notes" className="sheet @container flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Figma Report header (84:811): mark + titles, gap progress, actions. */}
+      <header className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-ink/8 bg-card/72 px-4 py-3.5 backdrop-blur-md sm:px-8">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand SVG */}
+          <img src="/brand-mark.svg" alt="" width={30} height={30} className="h-[30px] w-[30px] shrink-0" />
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold leading-[22px] tracking-[-0.01em] text-ink">{report ? "Knowledge Gap Report" : "Gap notes"}</h2>
+            {scheme?.topic && <p className="truncate text-sm leading-5 text-faint">{scheme.topic}</p>}
+          </div>
         </div>
-        {report && (
-          <button
-            type="button"
-            onClick={onRecheck}
-            disabled={checking}
-            className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-muted hover:bg-canvas hover:text-ink disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${checking ? "animate-spin" : ""}`} /> Re-check
-          </button>
+        {gaps.length > 0 && (
+          <nav aria-label="Gaps" className="order-last flex w-full items-center justify-center gap-1.5 @4xl:order-none @4xl:w-auto">
+            {gaps.map((g, i) => (
+              <button
+                key={g.criterion.id}
+                type="button"
+                onClick={() => go(i)}
+                aria-label={`Gap ${i + 1}: ${plainMath(g.criterion.title)}`}
+                aria-current={i === page ? "step" : undefined}
+                className="flex h-6 items-center"
+              >
+                <span className={`block h-1.5 rounded-full transition-all ${SEVERITY[displayStatus(g.result)]?.bar ?? "bg-line"} ${i === page ? "w-14" : "w-8 opacity-35 hover:opacity-60"}`} />
+              </button>
+            ))}
+          </nav>
         )}
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-semibold hover:bg-canvas"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to whiteboard
-        </button>
+        <div className="flex w-full items-center justify-end gap-2 @lg:w-auto @lg:flex-1">
+          {report && (
+            <button type="button" onClick={onRecheck} disabled={checking} className={QUIET}>
+              {checking ? (
+                <>
+                  <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden /> Checking…
+                </>
+              ) : (
+                "Re-check"
+              )}
+            </button>
+          )}
+          <button type="button" onClick={onBack} className={PRIMARY}>
+            Back to teaching
+          </button>
+        </div>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-canvas p-4 sm:p-5">
-        {report && scheme && (
-          <ScoreSummary
-            awarded={report.awarded}
-            total={report.total}
-            counts={{ missed: gaps.filter((g) => displayStatus(g.result) === "missed").length, partial: gaps.filter((g) => displayStatus(g.result) === "partial").length, parked: gaps.filter((g) => displayStatus(g.result) === "parked").length, not_covered: notCovered.length }}
-            nailed={fullMarks.map((c) => c.title)}
-          />
-        )}
-
-        {checking && (
-          <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-4" role="status">
-            <LoaderCircle className="h-5 w-5 animate-spin text-accent" />
-            <div>
-              <p className="text-sm font-semibold">Marking against your mark scheme…</p>
-              <p className="text-xs text-muted">Checking every point with quotes from what you said. About 15 seconds.</p>
+      <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto bg-canvas">
+        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-5 px-4 pb-8 pt-6 sm:pt-10">
+          {checking && (
+            <div className="flex items-center gap-3 rounded-[14px] border border-line bg-card p-4" role="status">
+              <LoaderCircle className="h-5 w-5 animate-spin text-accent" />
+              <div>
+                <p className="text-sm font-semibold">Marking against your mark scheme…</p>
+                <p className="text-xs text-muted">Checking every point with quotes from what you said. About 15 seconds.</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {check.status === "error" && (
-          <div className="rounded-2xl border border-missed/30 bg-missed-soft p-4 text-sm" role="alert">
-            <p className="font-semibold text-missed">The check didn’t finish</p>
-            <p className="mt-0.5">{check.error}</p>
-            <button type="button" onClick={onRecheck} className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-xs font-semibold hover:bg-canvas">
-              <RefreshCw className="h-3.5 w-3.5" /> Try again
-            </button>
-          </div>
-        )}
-
-        {!report && !checking && check.status !== "error" && (
-          <p className="text-sm text-muted">Explain the topic, then press Check my progress to see your marks point by point.</p>
-        )}
-
-        {report &&
-          scheme &&
-          gaps.map((g) => (
-            <GapCard
-              key={g.criterion.id}
-              gap={g}
-              primary={g.criterion.id === report.primaryGapId}
-              file={scheme.sourceFile}
-              visual={visuals[g.criterion.id]}
-              onRetryVisual={() => onRetryVisual(g.criterion.id)}
-            />
-          ))}
-
-        {report && notCovered.length > 0 && (
-          <article className="rounded-2xl border border-dashed border-line bg-card p-4 sm:p-5">
-            <h3 className="font-semibold">Not covered yet</h3>
-            <ul className="mt-2 space-y-1.5 text-sm">
-              {notCovered.map((c) => (
-                <li key={c.id} className="flex items-center gap-2">
-                  <StatusIcon status="not_covered" />
-                  <MathText text={c.title} className="flex-1" />
-                  <span className="text-xs font-semibold text-faint">{c.marks} marks</span>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              onClick={() => onTeachNext(notCovered.map((c) => c.id))}
-              className="mt-3 inline-flex h-11 items-center gap-2 rounded-full bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-strong"
-            >
-              <Sparkles className="h-4 w-4" /> Teach these next
-            </button>
-          </article>
-        )}
-
-        {report && report.studyPlan.length > 0 && (
-          <article className="rounded-2xl border border-line bg-card p-4 sm:p-5">
-            <div className="flex items-baseline justify-between">
-              <h3 className="font-semibold">Study plan</h3>
-              <span className="text-xs font-semibold text-muted">{minutesLeft} min left</span>
+          {check.status === "error" && (
+            <div className="rounded-[14px] border border-missed/30 bg-missed-soft p-4 text-sm" role="alert">
+              <p className="font-semibold text-missed">The check didn’t finish</p>
+              <p className="mt-0.5">{check.error}</p>
+              <button type="button" onClick={onRecheck} className={`${OUTLINE} mt-2`}>
+                <RefreshCw className="h-4 w-4" aria-hidden /> Try again
+              </button>
             </div>
-            <ul className="mt-2 space-y-1">
-              {report.studyPlan.map((s) => (
-                <li key={s.id}>
-                  <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-canvas">
-                    <input type="checkbox" checked={!!s.done} onChange={() => onToggleStep(s.id)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
-                    <span className="min-w-0 flex-1">
-                      <span className={`block text-sm font-semibold ${s.done ? "text-faint line-through" : ""}`}><MathText text={s.title} /></span>
-                      <span className="block text-xs text-muted"><MathText text={s.detail} /></span>
-                    </span>
-                    <span className="shrink-0 text-xs font-semibold text-faint">{s.estimatedMinutes} min</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </article>
-        )}
+          )}
 
+          {!report && !checking && check.status !== "error" && (
+            <p className="text-sm text-muted">Explain the topic, then press Check my progress to see your marks point by point.</p>
+          )}
+
+          {report && scheme && (
+            <>
+              <div className="flex items-center gap-3 text-sm leading-5 tracking-[-0.005em]">
+                <p className="min-w-0 flex-1 font-medium text-faint" aria-live="polite">
+                  {gap ? `Gap ${page + 1} of ${gaps.length}` : gaps.length ? "Overview and study plan" : "Overview"}
+                </p>
+                <p className="shrink-0 whitespace-nowrap" title={`${report.awarded} of ${report.total} marks`}>
+                  <span className="font-semibold tabular-nums text-ink">{pct}</span>
+                  <span className="text-faint"> · {verdict(report.awarded, report.total)}</span>
+                </p>
+              </div>
+
+              {gap ? (
+                <GapCard
+                  key={gap.criterion.id}
+                  gap={gap}
+                  index={page}
+                  {...stepFor(gap.criterion.id)}
+                  visual={visuals[gap.criterion.id]}
+                  onRequestVisual={() => onRetryVisual(gap.criterion.id)}
+                  onPractise={() => onTeachNext([gap.criterion.id])}
+                />
+              ) : (
+                <Overview
+                  report={report}
+                  gaps={gaps}
+                  notCovered={notCovered}
+                  nailed={fullMarks.map((c) => c.title)}
+                  minutesLeft={minutesLeft}
+                  onTeachNext={onTeachNext}
+                  onToggleStep={onToggleStep}
+                />
+              )}
+
+              {/* Figma Pager (84:891). */}
+              <div className="flex items-start gap-2">
+                <button type="button" onClick={() => go(page - 1)} disabled={page === 0} className={`${QUIET} disabled:invisible`}>
+                  Previous
+                </button>
+                <span className="flex-1" />
+                {page < pages - 1 && (
+                  <button type="button" onClick={() => go(page + 1)} className={PRIMARY}>
+                    {page < gaps.length - 1 ? "Next gap" : "Overview"}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </section>
+  );
+}
+
+/** The last page: score, what is not covered yet, and the study plan. */
+function Overview({
+  report,
+  gaps,
+  notCovered,
+  nailed,
+  minutesLeft,
+  onTeachNext,
+  onToggleStep,
+}: {
+  report: GapReport;
+  gaps: Gap[];
+  notCovered: Criterion[];
+  nailed: string[];
+  minutesLeft: number;
+  onTeachNext: (ids: string[]) => void;
+  onToggleStep: (id: string) => void;
+}) {
+  const n = (k: string) => gaps.filter((g) => displayStatus(g.result) === k).length;
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-[14px] border border-line bg-card px-5 py-6 sm:px-8 sm:py-7">
+        <ScoreSummary
+          awarded={report.awarded}
+          total={report.total}
+          counts={{ missed: n("missed"), partial: n("partial"), parked: n("parked"), not_covered: notCovered.length }}
+          nailed={nailed}
+        />
+      </div>
+
+      {notCovered.length > 0 && (
+        <article className="rounded-[14px] border border-dashed border-line-strong bg-card px-5 py-6 sm:px-8">
+          <h3 className="text-base font-semibold">Not covered yet</h3>
+          <ul className="mt-2 space-y-1.5 text-sm">
+            {notCovered.map((c) => (
+              <li key={c.id} className="flex items-center gap-2">
+                <StatusIcon status="not_covered" />
+                <MathText text={c.title} className="flex-1" />
+                <span className="text-xs font-semibold text-faint">{c.marks} marks</span>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={() => onTeachNext(notCovered.map((c) => c.id))} className={`${PRIMARY} mt-3`}>
+            <Sparkles className="h-4 w-4" aria-hidden /> Teach these next
+          </button>
+        </article>
+      )}
+
+      {report.studyPlan.length > 0 && (
+        <article className="rounded-[14px] border border-line bg-card px-5 py-6 sm:px-8">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-base font-semibold">Study plan</h3>
+            <span className="text-xs font-semibold text-muted">{minutesLeft} min left</span>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {report.studyPlan.map((s, i) => (
+              <li key={s.id}>
+                <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 hover:bg-canvas">
+                  <input type="checkbox" checked={!!s.done} onChange={() => onToggleStep(s.id)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-sm font-semibold ${s.done ? "text-faint line-through" : ""}`}>
+                      Step {i + 1} · <MathText text={s.title} />
+                    </span>
+                    <span className="block text-xs text-muted">
+                      <MathText text={s.detail} />
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-faint">{s.estimatedMinutes} min</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </article>
+      )}
+    </div>
   );
 }
 
