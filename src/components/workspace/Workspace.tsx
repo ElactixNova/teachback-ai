@@ -130,6 +130,9 @@ export function Workspace() {
   const visualCache = useRef(new Map<string, Promise<VisualExplainer | null>>());
   /** Pictures started speculatively during the session (a point the student has left with marks lost). */
   const prefetched = useRef(0);
+  /** The report key a speculative final marking last ran for, and how many ran (at most two per session). */
+  const prefetchedFinal = useRef("");
+  const prefetchedFinals = useRef(0);
 
   // ---- Mark scheme ----------------------------------------------------------------------------
   const schemeSeq = useRef(0);
@@ -319,8 +322,6 @@ export function Workspace() {
   // Work ahead (T54): a point the student has left with marks lost gets its picture now, and once every point has been
   // touched the final marking runs quietly, so the report and its pictures are mostly ready when they ask for it.
   const MAX_PREFETCH_IMAGES = 3;
-  const prefetchedFinal = useRef("");
-  const prefetchedFinals = useRef(0); // at most two speculative final markings per session
   useEffect(() => {
     if (avatarStatus !== "live" || !markScheme || view !== "board") return;
     const focus = liveFocusId(results);
