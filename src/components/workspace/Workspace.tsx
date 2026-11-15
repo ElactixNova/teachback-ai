@@ -16,7 +16,7 @@ import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/bo
 import { spokenToLatex } from "@/lib/math/spoken";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
 import { downloadText, formatTranscript, transcriptFileName } from "./transcriptExport";
-import { analyzeFinal, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
+import { analyzeFinal, readBoard, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
 import {
   ANAM_VIDEO_ID,
   type Async,
@@ -186,6 +186,7 @@ export function Workspace() {
   const stateKey = () => `${latest.current.transcript.filter((l) => l.speaker === "student").length}:${latest.current.boardVersion}`;
   const liveReqKey = useRef(new WeakMap<object, string>());
   const markedKey = useRef("0:0");
+  const boardReadRef = useRef<{ version: number; promise: Promise<string> } | null>(null);
   const live = useLiveAnalysis({
     enabled: !!markScheme && view === "board" && check.status !== "checking",
     getInput: () => {
@@ -368,6 +369,14 @@ export function Workspace() {
       getRail: () => {
         const l = latest.current;
         return { markScheme: l.markScheme, results: l.results, transcript: timed(l.transcript), focusIds: l.focusIds, view: l.view };
+      },
+      readBoard: () => {
+        const v = latest.current.boardVersion;
+        if (boardReadRef.current?.version === v) return boardReadRef.current.promise;
+        const png = boardRef.current?.exportSnapshotBase64();
+        const promise = png ? readBoard(png).catch(() => "") : Promise.resolve("");
+        boardReadRef.current = { version: v, promise };
+        return promise;
       },
       refreshRail: async () => {
         // A run already in flight started before the latest line or stroke, so one more may be needed.

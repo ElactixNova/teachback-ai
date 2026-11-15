@@ -21,7 +21,7 @@ const TURNS = Number(process.argv[3]) || 9;
 const PDF = process.env.PDF || "Quadratic_Equations_GCSE_AQA_Notes.pdf";
 const HAIKU = process.env.LOOP_MODEL || "claude-haiku-5-5";
 
-async function ask(system, user, max = 400) {
+async function ask(system, user, max = 2500) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
@@ -108,7 +108,7 @@ const verdict = await ask(
 Criteria: student_not_interviewer: Sam should mostly let the teacher teach, asking at most one question every turn or two, not firing a quiz question after every answer. interprets_input: Sam shows she understood what the teacher actually said (says it back in her own words, asks about something specific they said) instead of ignoring it for the next scripted question. no_repeats: never asks about the same thing twice, in any wording. natural_acknowledgement: reacts like a real classmate; no praise-judging ("Right", "Great") of answers she cannot know are right. welcomes_explaining: invites the teacher to continue and explain, and does not interrupt or cut off.`,
   `Transcript:
 ${text}`,
-  1200,
+  4000,
 );
 console.log(`\nJUDGE:\n${verdict}`);
 fs.writeFileSync(path.join(here, "out", `loop-${STYLE}.txt`), `${text}\n\nDelays: ${waited.join(", ")}\n\n${verdict}\n`);

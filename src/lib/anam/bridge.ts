@@ -108,18 +108,20 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
         return summariseFinal(actions.getRail().markScheme, report);
       },
     }),
-    client.registerToolCallHandler(TOOL.captureWhiteboard, afterRefresh(actions, {
+    client.registerToolCallHandler(TOOL.captureWhiteboard, {
       // Marked first, so the answer names what is on the board now (T32: Sam said "Got it" to boards she had not seen).
       onStart: async () => {
         const snap = actions.captureWhiteboard();
         if (!snap) return "The whiteboard is empty. Ask them to sketch what they mean.";
+        // A fast board-only read (about 2 s, usually already done while they were writing); the full marking is not awaited.
+        const read = await Promise.race([actions.readBoard().catch(() => ""), new Promise<string>((done) => setTimeout(() => done(""), 5000))]);
         const { markScheme, results } = actions.getRail();
-        const seen = markScheme ? boardNote(markScheme, results) : "";
+        const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
         return seen
           ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply, using only what is written above and adding no detail of your own.`
           : "They have drawn on the whiteboard but you cannot make out what it says. Do NOT describe or guess any content. Say honestly that you cannot quite read it and ask what they wrote.";
       },
-    })),
+    }),
     client.registerToolCallHandler(TOOL.generateVisualExplainer, {
       onStart: async (p) => {
         const { markScheme } = actions.getRail();
@@ -232,10 +234,10 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
             return;
           }
           // They stopped: read the board first, so Sam hears what is written, not only that something was.
-          void freshen(actions).then(() => {
+          void actions.readBoard().catch(() => "").then((read) => {
             if (turn !== boardTurn) return; // they picked the pen up again meanwhile
             const { markScheme, results } = actions.getRail();
-            const seen = markScheme ? boardNote(markScheme, results) : "";
+            const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
             session.addContext(`${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.${seen ? ` ${seen}` : ""}`);
           });
         },
