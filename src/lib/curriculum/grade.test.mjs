@@ -98,3 +98,18 @@ test("said: the summary of what the student said passes through, trimmed, never 
   assert.equal(res[0].said, "You said plants use CO2 and water, then corrected the roots.");
   assert.equal(res[1].said, undefined);
 });
+
+test("T52 hideAnswer: a title never shows the formula or answer the student is meant to give", async () => {
+  const { hideAnswer } = await import("./grade.ts");
+  const cases = [
+    ["The quadratic formula: x = (-b ± √(b² − 4ac)) / 2a", "The quadratic formula"],
+    ["Area formula A = ½ × b × h", "Area formula"],
+    ["Area of a triangle - base times height over two", "Area of a triangle"],
+    ["Solving by factorising when a = 1", "Solving by factorising when a"],
+    ["Why the formula has a half", "Why the formula has a half"],
+    ["Using the formula in a calculation", "Using the formula in a calculation"],
+    ["Discriminant $b^2 - 4ac$", "Discriminant"],
+    ["Factorising when a ≠ 1", "Factorising when a"],
+  ];
+  for (const [input, want] of cases) assert.equal(hideAnswer(input), want, input);
+});

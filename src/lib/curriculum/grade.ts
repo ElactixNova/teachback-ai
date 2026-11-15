@@ -148,6 +148,21 @@ export function buildReport(scheme: MarkScheme, results: CriterionResult[], rawP
   };
 }
 
+/**
+ * A point's title is shown on screen the whole session, so it must never hand over what the student is meant to say:
+ * "The quadratic formula: x = (-b ± ...)" becomes "The quadratic formula" (T52). The answer stays in `expected`.
+ */
+export function hideAnswer(title: string): string {
+  const t = title.trim();
+  let head = t.split(/\s*:\s+|\s+[-—–]\s+/)[0] ?? t; // "Formula: ..." and "Formula - ..." keep only the label
+  const m = head.search(/[=$\√±^÷×≠≤≥<>]/);
+  if (m >= 0) head = head.slice(0, m);
+  const words = head.trim().split(/\s+/);
+  while (words.length > 1 && /^[A-Za-z(\[]{0,1}[A-Za-z0-9)\]]{0,1}$/.test(words[words.length - 1]) && !/^(a|an|of|in|on|to|is|as|by|or|and|the)$/.test(words[words.length - 1])) words.pop();
+  const out = words.join(" ").replace(/[\s,;(\[-]+$/, "");
+  return out.length >= 3 ? out : t;
+}
+
 /** Builds a MarkScheme from the model's draft: ids, marks (1 per step), totals and the page range are computed here. */
 export function buildMarkScheme(
   draft: { topic: string; criteria: { title: string; expected: string[]; page: number; label: string | null; probe?: string | null; ask?: AskMode | null }[] },
@@ -161,7 +176,7 @@ export function buildMarkScheme(
       const page = Math.max(1, Math.min(meta.maxPage, Math.round(c.page) || 1));
       return {
         id: `c${i + 1}`,
-        title: c.title.trim(),
+        title: hideAnswer(c.title),
         expected: c.expected,
         marks: c.expected.length,
         source: { page, ...(c.label ? { label: c.label } : {}) },
