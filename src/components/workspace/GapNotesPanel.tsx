@@ -90,7 +90,7 @@ const sentence = (t: string) => (/[.!?:$)]$/.test(t) ? t : `${t}.`);
 
 /**
  * Figma Visual Explainer (11:150) inside a gap card: Idle ("Show me visually") -> Loading -> Image or Video; Error
- * offers Retry. The primary gap starts loading on its own; the others wait for the student to ask.
+ * offers Retry. Every gap starts loading on its own when the review opens; this button is the fallback (idle) and Retry.
  */
 function SeeIt({ state, title, onRequest }: { state: VisualState | undefined; title: string; onRequest: () => void }) {
   const box = "flex min-h-[243px] w-full flex-col items-center justify-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-line-strong bg-canvas p-4 text-center";

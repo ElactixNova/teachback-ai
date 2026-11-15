@@ -293,7 +293,9 @@ export function Workspace() {
   const checkExplanation = useCallback(async () => {
     setView("notes");
     const r = await runFinal();
-    if (r?.primaryGapId) void generateVisualExplainer(r.primaryGapId);
+    // Every gap card in the review gets its picture without being asked (primary gap first), same as the end screen.
+    const s = latest.current.markScheme;
+    if (r && s) for (const g of gapsOf(s, r).slice(0, MAX_LEARN_IMAGES)) void generateVisualExplainer(g.criterion.id);
     return r;
   }, [runFinal, generateVisualExplainer]);
 
