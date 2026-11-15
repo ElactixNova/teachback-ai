@@ -16,6 +16,7 @@ import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/bo
 import { spokenToLatex } from "@/lib/math/spoken";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
 import { downloadText, formatTranscript, transcriptFileName } from "./transcriptExport";
+import { diagLines } from "@/lib/anam/diag";
 import { analyzeFinal, readBoard, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
 import {
   ANAM_VIDEO_ID,
@@ -479,7 +480,7 @@ export function Workspace() {
     const { transcript: lines, markScheme: s, report: r, curriculum: cur, view: v } = latest.current;
     const date = new Date(sessionStart.current ?? Date.now());
     const topic = s?.topic || cur?.topic || cur?.title;
-    const text = formatTranscript({ topic, date, mark: r ? { awarded: r.awarded, total: r.total, final: v === "summary" } : undefined, lines });
+    const text = formatTranscript({ topic, date, mark: r ? { awarded: r.awarded, total: r.total, final: v === "summary" } : undefined, lines, debug: diagLines() });
     downloadText(transcriptFileName(topic, date), text);
   }, []);
 
