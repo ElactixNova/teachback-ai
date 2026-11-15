@@ -3,13 +3,10 @@
 import { fal } from "@fal-ai/client";
 import type { VisualExplainer, VisualRequest } from "@/types/session";
 
-/** Best accuracy on diagrams with exact formulas and labels (~17s, $0.15). */
+/** The only model: best accuracy on diagrams with exact formulas and labels (~17s). The faster model drew inaccurate pictures, so it is not used. */
 export const PRIMARY_MODEL = "fal-ai/nano-banana-pro";
-/** Faster and cheaper, usually right but can garble formulas (~8s, $0.04). Used only if the primary fails or is slow. */
-export const BACKUP_MODEL = "fal-ai/nano-banana";
 
 const PRIMARY_TIMEOUT_MS = Number(process.env.FAL_PRIMARY_TIMEOUT_MS) || 30_000;
-const BACKUP_TIMEOUT_MS = 25_000;
 
 interface ImageOutput {
   images?: { url?: string }[];
@@ -45,21 +42,9 @@ async function render(model: string, prompt: string, timeout: number): Promise<s
   return url;
 }
 
-/** Accurate diagram first; if it errors or runs slow, the faster model. `fallback` marks the backup. */
 export async function generateVisual(req: VisualRequest): Promise<VisualExplainer> {
   ensureConfigured();
   const prompt = buildPrompt(req);
-  // A draft is the fast model alone: the workspace shows it at once and swaps in the accurate one when it lands.
-  if (req.quality === "draft") {
-    const url = await render(BACKUP_MODEL, prompt, BACKUP_TIMEOUT_MS);
-    return { kind: "image", url, model: BACKUP_MODEL, prompt, fallback: true };
-  }
-  try {
-    const url = await render(PRIMARY_MODEL, prompt, PRIMARY_TIMEOUT_MS);
-    return { kind: "image", url, model: PRIMARY_MODEL, prompt };
-  } catch (err) {
-    console.warn("primary visual model failed, using backup", err instanceof Error ? err.message : err);
-    const url = await render(BACKUP_MODEL, prompt, BACKUP_TIMEOUT_MS);
-    return { kind: "image", url, model: BACKUP_MODEL, prompt, fallback: true };
-  }
+  const url = await render(PRIMARY_MODEL, prompt, PRIMARY_TIMEOUT_MS);
+  return { kind: "image", url, model: PRIMARY_MODEL, prompt };
 }

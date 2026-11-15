@@ -198,8 +198,6 @@ export interface VisualRequest {
   concept: string;
   misconception: string;
   visualPrompt: string;
-  /** "draft" = the fast model only (~8 s); omitted or "final" = the accurate model with the fast one as its fallback. */
-  quality?: "draft" | "final";
 }
 
 export interface VisualExplainer {

@@ -22,7 +22,6 @@ export async function POST(req: Request) {
     concept: body.concept.trim().slice(0, 300),
     misconception: typeof body.misconception === "string" ? body.misconception.slice(0, 600) : "",
     visualPrompt: typeof body.visualPrompt === "string" ? body.visualPrompt.slice(0, 1500) : "",
-    quality: body.quality === "draft" ? "draft" : "final",
   };
 
   try {

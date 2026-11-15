@@ -361,3 +361,13 @@ test("T37 pacing: a follow-on turn ends with a hook, never a flat statement, and
   const fresh = planNote(quad, untouched(quad), session, [], true);
   assert.match(fresh, /Your question this turn/);
   });
+
+test("T39 pushed rail notes are facts only: they never name a next question or a follow-up", () => {
+  const before = emptyResults(scheme);
+  const after = before.map((x, i) => (i === 0 ? { ...r(x.criterionId, "full", 2), missingSteps: [] } : x));
+  const note = railChangeNote(scheme, before, after);
+  assert.match(note, /Now fully explained/);
+  assert.doesNotMatch(note, /Next question|FIRST, before moving on|SWEEP|reacting in a few words/);
+  // The on-demand status (get_rail_status) still steers.
+  assert.match(railStatusText(scheme, after), /Next question/);
+});

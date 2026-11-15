@@ -64,6 +64,8 @@ interface SamNote extends Rect {
   clock: WriteClock | null;
 }
 
+/** A question that waited this long behind the student's pen is dropped: they have moved on without it. */
+const STALE_NOTE_MS = 6000;
 /** Screen px reserved for the tool dock (top) and the zoom / check controls (bottom): notes stay out of them. */
 const DOCK_PX = 64;
 const CONTROLS_PX = 88;
@@ -242,7 +244,8 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   const [notes, setNotes] = useState<SamNote[]>([]);
   const notesRef = useRef<SamNote[]>([]);
   const noteId = useRef(0);
-  const pendingNotes = useRef<NoteInput[]>([]);
+  // A queued question is only worth writing while it is fresh: one that waited behind the student's pen is dropped (T39).
+  const pendingNotes = useRef<{ input: NoteInput; at: number }[]>([]);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteDrag = useRef<{ id: number; x: number; y: number } | null>(null);
   const updateNotes = useCallback((fn: (ns: SamNote[]) => SamNote[]) => {
@@ -415,8 +418,10 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
   const flushNotes = useCallback(() => {
     const hidden = (wrapRef.current?.getBoundingClientRect().width ?? 0) < 1;
     if (hidden || current.current || pointers.current.size > 0 || notesRef.current.some((n) => n.clock)) return;
+    const now = performance.now();
+    pendingNotes.current = pendingNotes.current.filter((p) => now - p.at < STALE_NOTE_MS);
     const next = pendingNotes.current.shift();
-    if (next) placeNow(next);
+    if (next) placeNow(next.input);
   }, [placeNow]);
   useEffect(() => {
     afterWriting.current = flushNotes;
@@ -444,16 +449,16 @@ export const WhiteboardCanvas = forwardRef<WhiteboardHandle, Props>(function Whi
         if (!hidden && !busy) showRect({ x: existing.x, y: existing.y, w: existing.w, h: existing.h * 3 });
         return { status: "already", where: "where it was written" };
       }
-      if (pendingNotes.current.some((p) => mathKey(p.content) === key)) return { status: "queued" };
+      if (pendingNotes.current.some((p) => mathKey(p.input.content) === key)) return { status: "queued" };
       // Never while the board is hidden (results view) or the pen is down: the note would land under
       // their hand or move the board mid-stroke.
       if (hidden) {
-        pendingNotes.current.push(input);
+        pendingNotes.current.push({ input, at: performance.now() });
         return { status: "hidden" };
       }
       // One question at a time: a second one waits for the pen to finish the first.
       if (busy || noteTimer.current || notesRef.current.some((n) => n.clock)) {
-        pendingNotes.current.push(input);
+        pendingNotes.current.push({ input, at: performance.now() });
         return { status: "queued" };
       }
       return placeNow(input);
