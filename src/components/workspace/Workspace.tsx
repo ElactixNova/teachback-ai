@@ -234,11 +234,23 @@ export function Workspace() {
     const setForThisReport = (state: VisualState) => {
       if (latest.current.report === r) setVisuals((v) => ({ ...v, [c.id]: state }));
     };
+    // Draft and accurate picture are requested together: the fast one shows after ~8 s and is replaced by the
+    // accurate one (~16 s). If the accurate one fails the draft stays, so a picture is almost always there.
+    const request = visualRequestForCriterion(c, res, s.topic);
+    let shown = false;
+    const draft = generateVisual({ ...request, quality: "draft" }).then((v) => {
+      if (!shown) setForThisReport({ status: "ready", data: v });
+      return v;
+    });
+    draft.catch(() => null);
     try {
-      const visual = await generateVisual(visualRequestForCriterion(c, res, s.topic));
+      const visual = await generateVisual({ ...request, quality: "final" });
+      shown = true;
       setForThisReport({ status: "ready", data: visual });
       return visual;
     } catch (e) {
+      const fallback = await draft.catch(() => null);
+      if (fallback) return fallback;
       setForThisReport({ status: "error", error: e instanceof Error ? e.message : "Could not draw this one." });
       return null;
     }

@@ -36,7 +36,7 @@ export function buildPrompt(req: VisualRequest): string {
 
 async function render(model: string, prompt: string, timeout: number): Promise<string> {
   const result = await fal.subscribe(model, {
-    input: { prompt, aspect_ratio: "16:9", num_images: 1 },
+    input: { prompt, aspect_ratio: "16:9", num_images: 1, output_format: "jpeg" },
     timeout,
     logs: false,
   });
@@ -49,6 +49,11 @@ async function render(model: string, prompt: string, timeout: number): Promise<s
 export async function generateVisual(req: VisualRequest): Promise<VisualExplainer> {
   ensureConfigured();
   const prompt = buildPrompt(req);
+  // A draft is the fast model alone: the workspace shows it at once and swaps in the accurate one when it lands.
+  if (req.quality === "draft") {
+    const url = await render(BACKUP_MODEL, prompt, BACKUP_TIMEOUT_MS);
+    return { kind: "image", url, model: BACKUP_MODEL, prompt, fallback: true };
+  }
   try {
     const url = await render(PRIMARY_MODEL, prompt, PRIMARY_TIMEOUT_MS);
     return { kind: "image", url, model: PRIMARY_MODEL, prompt };
