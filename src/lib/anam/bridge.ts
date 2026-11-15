@@ -5,7 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
-import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText } from "@/lib/rail/state";
+import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
 import { spokenToLatex } from "@/lib/math/spoken";
@@ -108,17 +108,18 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
         return summariseFinal(actions.getRail().markScheme, report);
       },
     }),
-    client.registerToolCallHandler(TOOL.captureWhiteboard, {
+    client.registerToolCallHandler(TOOL.captureWhiteboard, afterRefresh(actions, {
+      // Marked first, so the answer names what is on the board now (T32: Sam said "Got it" to boards she had not seen).
       onStart: async () => {
         const snap = actions.captureWhiteboard();
         if (!snap) return "The whiteboard is empty. Ask them to sketch what they mean.";
         const { markScheme, results } = actions.getRail();
         const seen = markScheme ? boardNote(markScheme, results) : "";
         return seen
-          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer.`
+          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply.`
           : "They have drawn on the whiteboard and the examiner is reading it now (within about 20 seconds). Acknowledge it in a few words, never ask them to repeat it aloud, and carry on.";
       },
-    }),
+    })),
     client.registerToolCallHandler(TOOL.generateVisualExplainer, {
       onStart: async (p) => {
         const { markScheme } = actions.getRail();
@@ -159,6 +160,7 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       const { markScheme } = actions.getRail();
       const ctx = getContext();
       let stopWatch = () => {};
+      let planAhead: (justSaid: string) => void = () => {};
       // Sam's questions reach the board even when the LLM never calls write_on_board (T27): the writer
       // hears every line, writes the maths questions she did not write, and knows her last question.
       const questions = createQuestionWriter((note) => actions.writeOnBoard(note), {
@@ -170,8 +172,12 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
           ...handlers,
           onTranscript: (speaker, text, id) => {
             handlers.onTranscript(speaker, text, id);
-            if (speaker === "avatar") questions.heard(id ?? text, text, true);
-            else questions.studentSaid(text);
+            if (speaker === "avatar") {
+              questions.heard(id ?? text, text, true);
+              // Sam replies about a second after the student stops, too soon for marking or a tool call.
+              // So right after each thing she says she gets her next question, ready before she needs it.
+              planAhead(text);
+            } else questions.studentSaid(text);
           },
           onTranscriptPartial: (id, speaker, soFar) => {
             handlers.onTranscriptPartial?.(id, speaker, soFar);
@@ -194,6 +200,17 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       });
       stopWatch = watchRail(actions, session.addContext);
       let boardTurn = 0;
+      let lastPlan = "";
+      planAhead = (justSaid) => {
+        const { markScheme, results, transcript, view } = actions.getRail();
+        if (!markScheme || view !== "board") return;
+        // The line she just said may not be in the workspace's transcript yet (it arrives a render later).
+        const lines = transcript.some((l) => l.speaker === "avatar" && l.text === justSaid) ? transcript : [...transcript, { speaker: "avatar" as const, text: justSaid, t: "" }];
+        const note = planNote(markScheme, results, lines);
+        if (note === lastPlan) return;
+        lastPlan = note;
+        session.addContext(note);
+      };
 
       return {
         disconnect: () => {
