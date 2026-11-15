@@ -41,7 +41,16 @@ const STYLES = {
   mixed: "Mix it up: usually 1 to 3 sentences, sometimes a fragment, once or twice go off on a tangent you find interesting, and once make a small mistake.",
 };
 
+/** The passive teacher (no model): only answers what it is asked, and says "What now?" when Sam gave it nothing to answer. */
+function passiveTeacher(transcript) {
+  const last = [...transcript].reverse().find((l) => l.speaker === "avatar")?.text ?? "";
+  if (/\b(draw|sketch|write|show me|on the board)\b/i.test(last)) return "BOARD";
+  if (/\?/.test(last)) return ["Yes.", "I think so.", "Okay, it is the one you drew.", "Yeah, because of how it works."][transcript.length % 4];
+  return "What now?";
+}
+
 async function teacherSays(topic, transcript, style) {
+  if (style === "passive") return passiveTeacher(transcript);
   const convo = transcript.map((l) => `${l.speaker === "avatar" ? "Sam" : "You"}: ${l.text}`).join("\n");
   const out = await ask(
     `You are a GCSE student who is TEACHING the topic "${topic}" to a classmate called Sam, typing your messages. ${STYLES[style]} You know the topic well. If Sam asks you to write something on the whiteboard, reply with exactly: BOARD. Never ask Sam questions about the topic more than rarely. Reply with only your next message.`,
@@ -99,6 +108,11 @@ await page.getByRole("button", { name: /^end$/i }).click({ timeout: 2000 }).catc
 await page.waitForTimeout(1000);
 await browser.close();
 
+const samLinesOut = lines.filter((l) => l.speaker === "avatar");
+const flat = samLinesOut.filter((l) => !/\?|\b(go on|carry on|keep going|continue|tell me more|what happens next)\b/i.test(l.text));
+const whatNow = lines.filter((l) => l.speaker === "student" && /^\W*what now\??\W*$/i.test(l.text)).length;
+console.log(`
+METRICS: ${flat.length} flat Sam lines (no question or invitation) of ${samLinesOut.length}; teacher had to say "What now?" ${whatNow} times`);
 const text = lines.map((l) => `${l.t} ${l.speaker === "avatar" ? "Sam" : "Teacher"}: ${l.text}`).join("\n");
 fs.mkdirSync(path.join(here, "out"), { recursive: true });
 console.log(text);

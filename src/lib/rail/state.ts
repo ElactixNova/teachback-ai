@@ -318,20 +318,19 @@ export function askLine(c: { title: string; probe?: string; ask?: "say" | "write
  * The private note Sam gets right after she asks a question: what is off limits, and the single new
  * question that may follow. Facts and one instruction, short enough to be followed.
  */
-export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = []): string {
+export function planNote(scheme: MarkScheme, results: CriterionResult[], transcript: TimedLine[] = [], told: Iterable<string> = [], allowNew = true): string {
   const plan = planNext(scheme, results, transcript, told);
   const title = (id: string) => scheme.criteria.find((c) => c.id === id)?.title ?? id;
   const cur = scheme.criteria.find((c) => c.id === plan.current);
-  // Pace (T33): a student does not quiz after every answer. After a turn where she asked, her next turn is a
-  // reaction (say back one thing they said, invite them to go on); only after a reaction does she ask again.
-  // At most one question in three turns: she reacts if either of her last two lines asked something.
-  const lastTwo = transcript.filter((l) => l.speaker === "avatar").slice(-2);
-  const react = lastTwo.some((l) => l.text.includes("?"));
+  // Pace (T37): what is rate-limited is NEW mark-scheme points (`allowNew`, decided by the bridge), never the hook.
+  // Every turn ends with one: a short curious question about the very thing they just said or drew, or an invitation
+  // to carry on. A closed statement hands the turn to the student, who then has to say "yes" and "what now?".
+  const react = !allowNew;
   return [
     PRIVATE_NOTE,
     react
-      ? "PACE: unless they ask or offer you something (then see next), your next reply must have NO question mark. Reflect ONE thing they just said in under twelve words, in fresh wording (not \"Okay, so you said\"), the way a classmate would, and stop. Do not recite their whole answer. If something confuses you, say which part instead. BUT if they just asked you something or offered to do something (\"do you want me to draw it?\", \"shall I explain?\", \"is that what you meant?\"), answer it at once and out loud, and accept the offer in your own words (\"Yes please, draw it for me\", \"Yes, go ahead\"): that always overrides the no-question rule, and you never leave an offer hanging in silence."
-      : "PACE: your next reply may include ONE question, after a short reaction in fresh wording. If they said what they will cover next, or invited you to choose, follow their lead.",
+      ? "PACE: this turn is a follow-on, not a new point. Reflect ONE thing they just said or drew in under twelve words, in fresh wording, then END WITH A HOOK about that same thing, in 8 words or fewer: usually a plain invitation to carry on (\"Go on, I'm following\", \"And then?\", \"Mm, keep going\"), or, only about something they just drew or wrote, one small specific question (\"Is that dashed line the height?\"). The hook is never a new topic, a different example or a new problem: that is not your turn yet. Never end on a flat statement, never recite their whole answer, never judge it. If they only said yes, okay, done or what now, they are waiting for YOU: ask your next question instead. If they asked or offered something (\"do you want me to draw it?\"), answer it at once and out loud (\"Yes please, draw it for me\") and never leave it hanging."
+      : "PACE: react in a few fresh words, then ask ONE new question (given below). If they only said yes, okay, done or what now, they are waiting for you: go straight to that question. If they said what they will cover next or invited you to choose, follow their lead. If they asked or offered something, answer it first.",
     plan.asked.length ? `Already asked, never ask about these again in any wording: ${plan.asked.map(title).join("; ")}.` : "",
     cur && (cur.ask === "write" || cur.ask === "draw")
       ? "Your current question is a board task: when they say they are done, call capture_whiteboard before you say anything, then mention one specific thing you can see in what they wrote."
