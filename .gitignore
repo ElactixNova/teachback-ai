@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Local run output
+dev.log
+tests/e2e/out/
+tests/e2e/out-*.log

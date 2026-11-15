@@ -1,0 +1,39 @@
+import { NextResponse } from "next/server";
+import { extractText } from "unpdf";
+import { MAX_CURRICULUM_CHARS, tooLongMessage } from "@/lib/curriculum/limits";
+import type { ApiError, CurriculumContext } from "@/types/session";
+
+const MAX_BYTES = 20 * 1024 * 1024;
+
+const fail = (status: number, error: string) => NextResponse.json<ApiError>({ error }, { status });
+
+/** multipart/form-data with a "file" PDF -> CurriculumContext. */
+export async function POST(req: Request) {
+  const file = (await req.formData().catch(() => null))?.get("file");
+  if (!(file instanceof File)) return fail(400, 'Upload a PDF in the "file" field.');
+  if (file.size > MAX_BYTES) return fail(413, "That PDF is larger than 20 MB.");
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-") return fail(400, "That file is not a PDF.");
+
+  let extracted: { text: string[]; totalPages: number };
+  try {
+    extracted = await extractText(bytes, { mergePages: false });
+  } catch (err) {
+    console.error("parse-pdf failed", err);
+    return fail(422, "Could not read that PDF.");
+  }
+
+  // Page markers let the mark scheme cite real page numbers: "[Page 2]" precedes each page's text.
+  const text = extracted.text.map((t, i) => `[Page ${i + 1}]\n${t.trim()}`).join("\n\n").trim();
+  const hasText = extracted.text.some((t) => t.trim());
+  // shortcut: no OCR, so scanned or handwritten PDFs are rejected; add OCR if real notes need it.
+  if (!hasText) return fail(422, "No text found in that PDF. Scanned notes are not supported, upload a text PDF.");
+  if (text.length > MAX_CURRICULUM_CHARS) return fail(413, tooLongMessage(text.length));
+
+  return NextResponse.json<CurriculumContext>({
+    title: file.name.replace(/\.pdf$/i, ""),
+    text,
+    pageCount: extracted.totalPages,
+  });
+}

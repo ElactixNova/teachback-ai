@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+/*
+ * Feynman AI tokens, from the Figma file "TeachBack — UI design" (Foundations page, node 18:2).
+ * Figma names in comments. Light theme only. No gradients anywhere in the UI.
+ * The Tailwind names (canvas, card, muted, missed...) are kept so components don't change;
+ * each maps to the Figma role noted beside it.
+ */
+@theme inline {
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-hand: var(--font-caveat), cursive;
+
+  /* Surfaces */
+  --color-canvas: #f2f3fa; /* --paper */
+  --color-card: #ffffff; /* --surface */
+  --color-sunk: #f1eeff; /* --surface-sunk: Sam's bubbles, wells, inputs */
+  --color-stage: #14142b; /* --stage: avatar video background */
+  --color-line: #d9daf5; /* --line */
+  --color-line-strong: #a9abd9; /* --line-strong: drop zones, input borders */
+
+  /* Ink */
+  --color-ink: #14142b; /* --ink */
+  --color-muted: #3a3a5c; /* --ink-2 */
+  --color-faint: #5e5f80; /* --ink-3 */
+
+  /* Action + highlighter */
+  --color-accent: #5b5ce6; /* --accent */
+  --color-accent-strong: #4c46d7; /* --accent-hover */
+  --color-accent-soft: #e6e5ff; /* --accent-soft */
+  --color-highlight: #ffc2e2; /* --highlight: topic + correction key phrase ONLY */
+
+  /* Meaning (always paired with words or icons) */
+  --color-good: #0f7a4a;
+  --color-good-soft: #daf3e6;
+  --color-missed: #c22828; /* --critical */
+  --color-missed-soft: #fde3e1;
+  --color-partial: #a85200; /* --major */
+  --color-partial-soft: #ffebd2;
+  --color-parked: #4a5b78; /* --minor */
+  --color-parked-soft: #ececf7;
+  --color-live: #d9342b;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 18px; /* main sheets use --r-xl (18px) */
+
+  /* Shadows: hard ink offsets for the main cards and the two primary actions */
+  --shadow-1: 0 1px 2px rgba(20, 20, 43, 0.08);
+  --shadow-card: 3px 3px 0 #14142b;
+  --shadow-action: 2px 2px 0 #14142b;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  letter-spacing: -0.005em;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+}
+
+/* The highlighter: only the current topic and the key phrase of a correction. Never a fill. */
+.hl {
+  text-decoration: underline;
+  text-decoration-color: var(--color-highlight);
+  text-decoration-thickness: 9px;
+  text-underline-offset: -7px;
+  text-decoration-skip-ink: none;
+}
+
+/* The two main sheets (board column, session column): 1.25px ink outline + hard 3px shadow. */
+.sheet {
+  background: var(--color-card);
+  border: 1.25px solid var(--color-ink);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+
+/* Primary actions (Snap & Check, Finish): 1px outline + hard 2px shadow. */
+.action {
+  border: 1px solid var(--color-ink);
+  box-shadow: var(--shadow-action);
+}
+.action:active:not(:disabled) {
+  box-shadow: none;
+  transform: translate(2px, 2px);
+}
+
+.topbar {
+  background: var(--color-card);
+  border-bottom: 1px solid rgba(20, 20, 43, 0.08);
+}
+@supports (backdrop-filter: blur(24px)) {
+  .topbar {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(24px);
+  }
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-card), 0 0 0 4px var(--color-accent);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Score ring: draws in over 1.1s (the one "peak" moment). Instant under reduced motion (rule above). */
+@keyframes score-draw {
+  from {
+    stroke-dashoffset: 289;
+  }
+}
+.score-arc {
+  animation: score-draw 1.1s ease-out;
+}
