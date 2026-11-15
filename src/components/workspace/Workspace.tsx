@@ -61,14 +61,14 @@ export function Workspace() {
   const liveStart = useRef(new Map<string, number>());
   const [boardEmpty, setBoardEmpty] = useState(true);
   const [boardVersion, setBoardVersion] = useState(0);
-  // "Sam is waiting while you write": true while strokes keep coming, false 4s after the last one.
+  // "Sam is waiting while you write": true while strokes keep coming, false 3s after the last one.
   const [writing, setWriting] = useState(false);
   const writingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onBoardChange = useCallback((version: number) => {
     setBoardVersion(version);
     setWriting(true);
     if (writingTimer.current) clearTimeout(writingTimer.current);
-    writingTimer.current = setTimeout(() => setWriting(false), 4000);
+    writingTimer.current = setTimeout(() => setWriting(false), 3000);
   }, []);
   useEffect(() => () => {
     if (writingTimer.current) clearTimeout(writingTimer.current);
@@ -182,6 +182,10 @@ export function Workspace() {
   // Each final check bumps the epoch; a live result from a request sent before it is dropped (it would overwrite the final marks).
   const finalEpoch = useRef(0);
   const liveReqEpoch = useRef(new WeakMap<object, number>());
+  // What the last live result covered (student lines + board version), so refreshRail knows if anything is new.
+  const stateKey = () => `${latest.current.transcript.filter((l) => l.speaker === "student").length}:${latest.current.boardVersion}`;
+  const liveReqKey = useRef(new WeakMap<object, string>());
+  const markedKey = useRef("0:0");
   const live = useLiveAnalysis({
     enabled: !!markScheme && view === "board" && check.status !== "checking",
     getInput: () => {
@@ -190,6 +194,7 @@ export function Workspace() {
       const req = { markScheme: s, transcript: timed(lines), whiteboardBase64: boardRef.current?.exportSnapshotBase64() ?? undefined, mode: "live" as const };
       // useLiveAnalysis copies the request, so key on its transcript array (passed through by reference).
       liveReqEpoch.current.set(req.transcript, finalEpoch.current);
+      liveReqKey.current.set(req.transcript, stateKey());
       return req;
     },
     onResults: (incoming, req) => {
@@ -197,9 +202,12 @@ export function Workspace() {
       if (!s || req.markScheme !== s || latest.current.view !== "board") return;
       if (liveReqEpoch.current.get(req.transcript) !== finalEpoch.current) return;
       updateResults((prev) => mergeLiveResults(s, prev, incoming, req.transcript));
+      markedKey.current = liveReqKey.current.get(req.transcript) ?? markedKey.current;
     },
     changeKey: `${studentLines}:${boardVersion}`,
   });
+
+  const flushLive = live.flush;
 
   // (T24) Parked points used to add a "Parked: ... Back to it later." line to the chat. The chat is the
   // conversation only: parking shows on the rail (Parked status) and the end screen, never in the feed.
@@ -347,6 +355,10 @@ export function Workspace() {
         const l = latest.current;
         return { markScheme: l.markScheme, results: l.results, transcript: timed(l.transcript), focusIds: l.focusIds, view: l.view };
       },
+      refreshRail: async () => {
+        // A run already in flight started before the latest line or stroke, so one more may be needed.
+        for (let i = 0; i < 2 && stateKey() !== markedKey.current; i++) await flushLive();
+      },
       parkCriterion,
       checkExplanation,
       openGapReport: () => {
@@ -358,7 +370,7 @@ export function Workspace() {
       writeOnBoard: (note) => boardRef.current?.addNote(note) ?? { status: "hidden" },
       speechProgress: (chars, done) => boardRef.current?.speech(chars, done),
     }),
-    [parkCriterion, checkExplanation, finishSession, generateVisualExplainer],
+    [parkCriterion, checkExplanation, finishSession, generateVisualExplainer, flushLive],
   );
 
   // Dev only: lets the headless board-notes test drive the avatar's actions without an Anam session.

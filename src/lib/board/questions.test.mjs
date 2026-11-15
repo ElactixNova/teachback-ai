@@ -27,7 +27,10 @@ function setup({ latex = true } = {}) {
   );
   const advance = (ms) => {
     now += ms;
-    for (const t of timers.splice(0).sort((a, b) => a.at - b.at)) (t.at <= now ? t.fn() : timers.push(t));
+    for (const t of timers.splice(0).sort((a, b) => a.at - b.at)) {
+      if (t.at <= now) t.fn();
+      else timers.push(t);
+    }
   };
   return { writer, board, advance };
 }

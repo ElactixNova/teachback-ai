@@ -47,7 +47,7 @@ export interface RailSnapshot {
 /**
  * Actions the workspace exposes to the avatar's client tools (the bridge maps them in registerToolCallHandler).
  *   capture_whiteboard        -> captureWhiteboard()
- *   get_rail_status           -> getRail()
+ *   get_rail_status           -> refreshRail(), then getRail()
  *   park_criterion            -> parkCriterion(id)
  *   open_gap_report           -> checkExplanation() (or openGapReport() to reuse the last report)
  *   generate_visual_explainer -> generateVisualExplainer(criterionId?)
@@ -58,6 +58,11 @@ export interface WorkspaceActions {
   captureWhiteboard: () => WhiteboardSnapshot | null;
   /** Mark scheme, live results (with attempts/parked) and the timed transcript. Read it; don't cache it. */
   getRail: () => RailSnapshot;
+  /**
+   * Bring the rail up to date with what the student has just said or drawn: runs live marking now if
+   * anything changed since the last result, and resolves when it is in (at once if nothing changed).
+   */
+  refreshRail: () => Promise<void>;
   /** Park a criterion (stop probing it; it is revisited on the end screen). No-op for unknown ids. */
   parkCriterion: (criterionId: string) => void;
   /** "Check my progress" (was Snap & Check): final marking (mode "final"), then show the gap notes in the centre column. */

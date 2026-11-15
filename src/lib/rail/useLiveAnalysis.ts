@@ -43,7 +43,8 @@ export function useLiveAnalysis({ enabled, getInput, onResults, debounceMs = 20_
       minIntervalMs: debounceMs,
       run: async (signal) => {
         const input = cb.current.getInput();
-        if (!input || !input.transcript.some((l) => l.speaker === "student" && l.text.trim())) return;
+        // Something to mark: the student said something, or (T30) wrote on the board without speaking.
+        if (!input || (!input.whiteboardBase64 && !input.transcript.some((l) => l.speaker === "student" && l.text.trim()))) return;
         const request: AnalyzeRequest = { ...input, mode: "live" };
         setAnalysing(true);
         try {
