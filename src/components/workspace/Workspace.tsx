@@ -16,7 +16,7 @@ import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/bo
 import { spokenToLatex } from "@/lib/math/spoken";
 import { WhiteboardCanvas, type WhiteboardHandle } from "./WhiteboardCanvas";
 import { downloadText, formatTranscript, transcriptFileName } from "./transcriptExport";
-import { analyzeFinal, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
+import { analyzeFinal, readBoard, fetchMarkScheme, fetchRevisionNotes, generateVisual } from "./api";
 import {
   ANAM_VIDEO_ID,
   type Async,
@@ -186,6 +186,7 @@ export function Workspace() {
   const stateKey = () => `${latest.current.transcript.filter((l) => l.speaker === "student").length}:${latest.current.boardVersion}`;
   const liveReqKey = useRef(new WeakMap<object, string>());
   const markedKey = useRef("0:0");
+  const boardReadRef = useRef<{ version: number; promise: Promise<string> } | null>(null);
   const live = useLiveAnalysis({
     enabled: !!markScheme && view === "board" && check.status !== "checking",
     getInput: () => {
@@ -234,11 +235,23 @@ export function Workspace() {
     const setForThisReport = (state: VisualState) => {
       if (latest.current.report === r) setVisuals((v) => ({ ...v, [c.id]: state }));
     };
+    // Draft and accurate picture are requested together: the fast one shows after ~8 s and is replaced by the
+    // accurate one (~16 s). If the accurate one fails the draft stays, so a picture is almost always there.
+    const request = visualRequestForCriterion(c, res, s.topic);
+    let shown = false;
+    const draft = generateVisual({ ...request, quality: "draft" }).then((v) => {
+      if (!shown) setForThisReport({ status: "ready", data: v });
+      return v;
+    });
+    draft.catch(() => null);
     try {
-      const visual = await generateVisual(visualRequestForCriterion(c, res, s.topic));
+      const visual = await generateVisual({ ...request, quality: "final" });
+      shown = true;
       setForThisReport({ status: "ready", data: visual });
       return visual;
     } catch (e) {
+      const fallback = await draft.catch(() => null);
+      if (fallback) return fallback;
       setForThisReport({ status: "error", error: e instanceof Error ? e.message : "Could not draw this one." });
       return null;
     }
@@ -356,6 +369,14 @@ export function Workspace() {
       getRail: () => {
         const l = latest.current;
         return { markScheme: l.markScheme, results: l.results, transcript: timed(l.transcript), focusIds: l.focusIds, view: l.view };
+      },
+      readBoard: () => {
+        const v = latest.current.boardVersion;
+        if (boardReadRef.current?.version === v) return boardReadRef.current.promise;
+        const png = boardRef.current?.exportSnapshotBase64();
+        const promise = png ? readBoard(png).catch(() => "") : Promise.resolve("");
+        boardReadRef.current = { version: v, promise };
+        return promise;
       },
       refreshRail: async () => {
         // A run already in flight started before the latest line or stroke, so one more may be needed.

@@ -63,6 +63,11 @@ export interface WorkspaceActions {
    * anything changed since the last result, and resolves when it is in (at once if nothing changed).
    */
   refreshRail: () => Promise<void>;
+  /**
+   * What is on the whiteboard right now, in plain words ("" when empty or unreadable), from a fast model:
+   * about 2 s instead of the ~8 s a full marking run takes. Cached per board version, and shared by callers.
+   */
+  readBoard: () => Promise<string>;
   /** Park a criterion (stop probing it; it is revisited on the end screen). No-op for unknown ids. */
   parkCriterion: (criterionId: string) => void;
   /** "Check my progress" (was Snap & Check): final marking (mode "final"), then show the gap notes in the centre column. */

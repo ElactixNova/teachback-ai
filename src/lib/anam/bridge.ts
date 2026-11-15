@@ -5,7 +5,7 @@
 import type { AnamClient } from "@anam-ai/js-sdk";
 import type { CriterionResult, GapReport, MarkScheme } from "@/types/session";
 import type { AvatarBridge, AvatarSession, WorkspaceActions } from "@/components/workspace/types";
-import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote } from "@/lib/rail/state";
+import { PRIVATE_NOTE, boardNote, findCriterion, railChangeNote, railStatusText, planNote, planNext } from "@/lib/rail/state";
 import type { PersonaContext } from "./persona";
 import { createQuestionWriter, remoteLatex, type QuestionWriter } from "@/lib/board/questions";
 import { spokenToLatex } from "@/lib/math/spoken";
@@ -108,18 +108,20 @@ function registerTools(client: AnamClient, actions: WorkspaceActions, questions:
         return summariseFinal(actions.getRail().markScheme, report);
       },
     }),
-    client.registerToolCallHandler(TOOL.captureWhiteboard, afterRefresh(actions, {
+    client.registerToolCallHandler(TOOL.captureWhiteboard, {
       // Marked first, so the answer names what is on the board now (T32: Sam said "Got it" to boards she had not seen).
       onStart: async () => {
         const snap = actions.captureWhiteboard();
         if (!snap) return "The whiteboard is empty. Ask them to sketch what they mean.";
+        // A fast board-only read (about 2 s, usually already done while they were writing); the full marking is not awaited.
+        const read = await Promise.race([actions.readBoard().catch(() => ""), new Promise<string>((done) => setTimeout(() => done(""), 5000))]);
         const { markScheme, results } = actions.getRail();
-        const seen = markScheme ? boardNote(markScheme, results) : "";
+        const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
         return seen
-          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply.`
-          : "They have drawn on the whiteboard and the examiner is reading it now (within about 20 seconds). Acknowledge it in a few words, never ask them to repeat it aloud, and carry on.";
+          ? `They have drawn on the whiteboard. ${seen} Treat it as part of their answer: mention one specific thing from it in your reply, using only what is written above and adding no detail of your own.`
+          : "They have drawn on the whiteboard but you cannot make out what it says. Do NOT describe or guess any content. Say honestly that you cannot quite read it and ask what they wrote.";
       },
-    })),
+    }),
     client.registerToolCallHandler(TOOL.generateVisualExplainer, {
       onStart: async (p) => {
         const { markScheme } = actions.getRail();
@@ -200,15 +202,18 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
       });
       stopWatch = watchRail(actions, session.addContext);
       let boardTurn = 0;
-      let lastPlan = "";
+      const told = new Set<string>();
+      let pendingNext: string | null = null;
       planAhead = (justSaid) => {
         const { markScheme, results, transcript, view } = actions.getRail();
         if (!markScheme || view !== "board") return;
         // The line she just said may not be in the workspace's transcript yet (it arrives a render later).
         const lines = transcript.some((l) => l.speaker === "avatar" && l.text === justSaid) ? transcript : [...transcript, { speaker: "avatar" as const, text: justSaid, t: "" }];
-        const note = planNote(markScheme, results, lines);
-        if (note === lastPlan) return;
-        lastPlan = note;
+        // The point the last note told her to ask, if she asked something this turn, counts as asked however she worded it.
+        if (pendingNext && /\?/.test(justSaid)) told.add(pendingNext);
+        pendingNext = planNext(markScheme, results, lines, told).next?.id ?? null;
+        const note = planNote(markScheme, results, lines, told);
+        // Always sent, even when identical to the last one: the pacing instruction has to arrive before every reply.
         session.addContext(note);
       };
 
@@ -229,10 +234,10 @@ export function createAnamAvatarBridge(getContext: () => Omit<PersonaContext, "c
             return;
           }
           // They stopped: read the board first, so Sam hears what is written, not only that something was.
-          void freshen(actions).then(() => {
+          void actions.readBoard().catch(() => "").then((read) => {
             if (turn !== boardTurn) return; // they picked the pen up again meanwhile
             const { markScheme, results } = actions.getRail();
-            const seen = markScheme ? boardNote(markScheme, results) : "";
+            const seen = read ? `On their whiteboard right now: ${read}` : markScheme ? boardNote(markScheme, results) : "";
             session.addContext(`${PRIVATE_NOTE} Board status: the student stopped writing a few seconds ago.${seen ? ` ${seen}` : ""}`);
           });
         },
