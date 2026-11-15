@@ -86,7 +86,9 @@ For a demo, use a production build: `npm run build && npm start`.
 
 Optional settings (see `.env.example`): `ANAM_VOICE_MODEL` (for example `eleven_v4_turbo`), `ANAM_VOICE_SPEED`, `ANALYZE_MODEL`, `ANALYZE_LIVE_MODEL`, `BOARD_READ_MODEL`, `NEXT_PUBLIC_MIC_GUARD=off`.
 
-Try it: upload one of the sample notes in `fixtures/` (for example `Quadratic_Equations_GCSE_AQA_Notes.pdf`), wait for the mark scheme, press **Start session**, and teach Sam.
+Try it: upload one of the sample notes in `fixtures/` (for example `Quadratic_Equations_GCSE_AQA_Notes.pdf`, or `photosynthesis-gcse.pdf`), wait for the mark scheme to appear, press **Start session**, and teach Sam. The samples are GCSE-style revision notes written for testing; they follow the AQA topic names but are not AQA material. Any lecture-notes PDF works.
+
+No keys or accounts are needed to watch the demo video; running the app yourself needs your own Anam, Anthropic and fal keys (see above).
 
 ## Tests
 
